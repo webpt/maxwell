@@ -203,19 +203,21 @@ public class RowMap implements Serializable {
 				obj.writeFieldName(key.toLowerCase());
 				obj.writeRawValue(((RawJSONString) value).json);
 			} else {
-				if(value.getClass().equals(String.class)) {
-					String newData;
+				if(value != null) {
+					if (value.getClass().equals(String.class)) {
+						String newData;
 
-					if(removeNonAscii){
-						newData = value.toString().replaceAll("[^\\p{ASCII}]", "");
-					} else {
-						newData = value.toString();
-					}
+						if (removeNonAscii) {
+							newData = value.toString().replaceAll("[^\\p{ASCII}]", "");
+						} else {
+							newData = value.toString();
+						}
 
-					if (trimString > 0 && newData.length() > trimString) {
-						value = newData.substring(1, trimString);
-					} else {
-						value = newData;
+						if (trimString > 0 && newData.length() > trimString) {
+							value = newData.substring(1, trimString);
+						} else {
+							value = newData;
+						}
 					}
 				}
 				obj.writeObjectField(key.toLowerCase(), value);
@@ -249,19 +251,21 @@ public class RowMap implements Serializable {
 				generator.writeFieldName(key.toLowerCase());
 				generator.writeRawValue(((RawJSONString) value).json);
 			} else {
-				if(value.getClass().equals(String.class)) {
-					String newData;
+				if(value != null) {
+					if (value.getClass().equals(String.class)) {
+						String newData;
 
-					if(removeNonAscii){
-						newData = value.toString().replaceAll("[^\\p{ASCII}]", "");
-					} else {
-						newData = value.toString();
-					}
+						if (removeNonAscii) {
+							newData = value.toString().replaceAll("[^\\p{ASCII}]", "");
+						} else {
+							newData = value.toString();
+						}
 
-					if (trimString > 0 && newData.length() > trimString) {
-						value = newData.substring(1, trimString);
-					} else {
-						value = newData;
+						if (trimString > 0 && newData.length() > trimString) {
+							value = newData.substring(1, trimString);
+						} else {
+							value = newData;
+						}
 					}
 				}
 				generator.writeObjectField(key.toLowerCase(), value);
