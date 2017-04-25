@@ -3,6 +3,7 @@ package com.zendesk.maxwell.row;
 import com.fasterxml.jackson.core.*;
 import com.zendesk.maxwell.replication.BinlogPosition;
 import com.zendesk.maxwell.producer.MaxwellOutputConfig;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -178,7 +179,7 @@ public class RowMap implements Serializable {
 		}
 	}
 
-	private void writeEncryptedMapToJSON(String jsonMapName, LinkedHashMap<String, Object> data, boolean includeNullField, String encryption_key, String secret_key) throws IOException{
+	private void writeEncryptedMapToJSON(String jsonMapName, LinkedHashMap<String, Object> data, boolean includeNullField, String encryption_key, String secret_key, Integer trimString, boolean removeNonAscii) throws IOException{
 		JsonGenerator generator = jsonGeneratorThreadLocal.get();
 		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 		JsonGenerator obj = jsonFactory.createGenerator(outputStream);
@@ -193,17 +194,31 @@ public class RowMap implements Serializable {
 			if ( value instanceof List ) { // sets come back from .asJSON as lists, and jackson can't deal with lists natively.
 				List stringList = (List) value;
 
-				obj.writeArrayFieldStart(key);
-				for ( Object s : stringList )  {
-					obj.writeObject(s);
-				}
-				obj.writeEndArray();
+				String delimitedList = StringUtils.join(stringList, ',');
+
+				obj.writeStringField(key.toLowerCase(), delimitedList);
+
 			} else if (value instanceof RawJSONString) {
 				// JSON column type, using binlog-connector's serializers.
-				obj.writeFieldName(key);
+				obj.writeFieldName(key.toLowerCase());
 				obj.writeRawValue(((RawJSONString) value).json);
 			} else {
-				obj.writeObjectField(key, value);
+				if(value.getClass().equals(String.class)) {
+					String newData;
+
+					if(removeNonAscii){
+						newData = value.toString().replaceAll("[^\\p{ASCII}]", "");
+					} else {
+						newData = value.toString();
+					}
+
+					if (trimString > 0 && newData.length() > trimString) {
+						value = newData.substring(1, trimString);
+					} else {
+						value = newData;
+					}
+				}
+				obj.writeObjectField(key.toLowerCase(), value);
 			}
 		}
 		obj.writeEndObject();
@@ -212,7 +227,7 @@ public class RowMap implements Serializable {
 		generator.writeStringField(jsonMapName, RowEncrypt.encrypt(outputStream.toString(), encryption_key, secret_key));
 	}
 
-	private void writeMapToJSON(String jsonMapName, LinkedHashMap<String, Object> data, boolean includeNullField) throws IOException {
+	private void writeMapToJSON(String jsonMapName, LinkedHashMap<String, Object> data, boolean includeNullField, Integer trimString, boolean removeNonAscii) throws IOException {
 		JsonGenerator generator = jsonGeneratorThreadLocal.get();
 		generator.writeObjectFieldStart(jsonMapName); // start of jsonMapName: {
 
@@ -225,17 +240,31 @@ public class RowMap implements Serializable {
 			if ( value instanceof List ) { // sets come back from .asJSON as lists, and jackson can't deal with lists natively.
 				List stringList = (List) value;
 
-				generator.writeArrayFieldStart(key);
-				for ( Object s : stringList )  {
-					generator.writeObject(s);
-				}
-				generator.writeEndArray();
+				String delimitedList = StringUtils.join(stringList, ',');
+
+				generator.writeStringField(key.toLowerCase(), delimitedList);
+
 			} else if ( value instanceof RawJSONString ) {
 				// JSON column type, using binlog-connector's serializers.
-				generator.writeFieldName(key);
+				generator.writeFieldName(key.toLowerCase());
 				generator.writeRawValue(((RawJSONString) value).json);
 			} else {
-				generator.writeObjectField(key, value);
+				if(value.getClass().equals(String.class)) {
+					String newData;
+
+					if(removeNonAscii){
+						newData = value.toString().replaceAll("[^\\p{ASCII}]", "");
+					} else {
+						newData = value.toString();
+					}
+
+					if (trimString > 0 && newData.length() > trimString) {
+						value = newData.substring(1, trimString);
+					} else {
+						value = newData;
+					}
+				}
+				generator.writeObjectField(key.toLowerCase(), value);
 			}
 		}
 
@@ -296,15 +325,15 @@ public class RowMap implements Serializable {
 		}
 
 		if( outputConfig.encryptData && !outputConfig.encryptAll ){
-			writeEncryptedMapToJSON("data", this.data, outputConfig.includesNulls, outputConfig.encryption_key, outputConfig.secret_key);
+			writeEncryptedMapToJSON("data", this.data, outputConfig.includesNulls, outputConfig.encryption_key, outputConfig.secret_key, outputConfig.trimString, outputConfig.removeNonAscii);
 			if( !this.oldData.isEmpty() ){
-				writeEncryptedMapToJSON("old", this.oldData, outputConfig.includesNulls, outputConfig.encryption_key, outputConfig.secret_key);
+				writeEncryptedMapToJSON("old", this.oldData, outputConfig.includesNulls, outputConfig.encryption_key, outputConfig.secret_key, outputConfig.trimString, outputConfig.removeNonAscii);
 			}
 		} else {
-			writeMapToJSON("data", this.data, outputConfig.includesNulls);
+			writeMapToJSON("data", this.data, outputConfig.includesNulls, outputConfig.trimString, outputConfig.removeNonAscii);
 
 			if ( !this.oldData.isEmpty() ) {
-				writeMapToJSON("old", this.oldData, true);
+				writeMapToJSON("old", this.oldData, true, outputConfig.trimString, outputConfig.removeNonAscii);
 			}
 		}
 

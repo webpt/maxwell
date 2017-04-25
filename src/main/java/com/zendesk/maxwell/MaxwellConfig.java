@@ -142,6 +142,9 @@ public class MaxwellConfig extends AbstractConfig {
 		parser.accepts("secret_key", "The secret key for the AES encryption").withOptionalArg();
 		parser.accepts("encrypt_data", "boolean flag to encrypt the data element").withOptionalArg();
 		parser.accepts("encrypt_all", "boolean flag to encrypt all elements").withOptionalArg();
+		parser.accepts("trim_string", "Integer to trim string to this size").withOptionalArg();
+		parser.accepts("remove_nonascii", "boolean flag to enable removal of all non-ascii characters").withOptionalArg();
+
 
 		parser.accepts( "__separator_5" );
 
@@ -367,6 +370,8 @@ public class MaxwellConfig extends AbstractConfig {
 		outputConfig.encryptAll = fetchBooleanOption("encrypt_all", options, properties, false);
 		outputConfig.encryption_key = fetchOption("encryption_key", options, properties, null);
 		outputConfig.secret_key = fetchOption("secret_key", options, properties, null);
+		outputConfig.trimString = Integer.valueOf(fetchOption("trim_string", options, properties, "0"));
+		outputConfig.removeNonAscii = fetchBooleanOption("remove_nonascii", options, properties, false);
 
 		if ( this.excludeColumns != null ) {
 			for ( String s : this.excludeColumns.split(",") ) {

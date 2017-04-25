@@ -17,6 +17,8 @@ public class MaxwellOutputConfig {
 	public boolean encryptAll;
 	public String encryption_key;
 	public String secret_key;
+	public Integer trimString;
+	public boolean removeNonAscii;
 
 
 	public MaxwellOutputConfig() {
@@ -32,5 +34,7 @@ public class MaxwellOutputConfig {
 		this.encryptAll = false;
 		this.encryption_key = null;
 		this.secret_key = null;
+		this.removeNonAscii = false;
+		this.trimString = 0;
 	}
 }
