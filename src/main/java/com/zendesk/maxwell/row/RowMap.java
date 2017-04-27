@@ -10,11 +10,7 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.regex.Pattern;
 
 
@@ -179,6 +175,29 @@ public class RowMap implements Serializable {
 		}
 	}
 
+	private void writepKToJson(List<String> pkColumns, JsonGenerator g) throws IOException{
+		String[] pkColumnsArray = pkColumns.toArray(new String[pkColumns.size()]);
+		Arrays.sort(pkColumnsArray);
+		String primaryKeyString = "";
+		for (String s : pkColumnsArray) {
+			if(s.toLowerCase().equals("event_startdatetime")){
+				continue;
+			}
+			if(data.get(s) == null){
+				primaryKeyString += ",null";
+			}
+			else{
+				primaryKeyString += "," + data.get(s).toString().toLowerCase();
+			}
+		}
+		if(pkColumns.size() == 0){
+			g.writeStringField("primary_key", "none");
+		}
+		else{
+			g.writeStringField("primary_key", primaryKeyString.substring(1));
+		}
+	}
+
 	private void writeEncryptedMapToJSON(String jsonMapName, LinkedHashMap<String, Object> data, boolean includeNullField, String encryption_key, String secret_key, Integer trimString, boolean removeNonAscii) throws IOException{
 		JsonGenerator generator = jsonGeneratorThreadLocal.get();
 		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -289,6 +308,7 @@ public class RowMap implements Serializable {
 		g.writeStringField("table", this.table);
 		g.writeStringField("type", this.rowType);
 		g.writeNumberField("ts", this.timestamp);
+		writepKToJson(pkColumns, g);
 
 		if ( outputConfig.includesCommitInfo ) {
 			if ( this.xid != null )
