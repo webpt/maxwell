@@ -3,6 +3,6 @@ create table shard_1.null_bootstraps (id int auto_increment primary key, txt var
 insert into shard_1.null_bootstraps set txt = NULL
 insert into maxwell.bootstrap set database_name = 'shard_1', table_name = 'null_bootstraps'
 
--> { database: "shard_1", table: "null_bootstraps", type: "bootstrap-start", data: {} }
--> { database: "shard_1", table: "null_bootstraps", type:"bootstrap-insert", data: { id: 1, txt: null } }
--> { database: "shard_1", table: "null_bootstraps", type: "bootstrap-complete", data: {}}
+-> { database: "shard_1", table: "null_bootstraps", type: "bootstrap-start", primary_key: "null", data: {} }
+-> { database: "shard_1", table: "null_bootstraps", type:"bootstrap-insert", primary_key: "1", data: { id: 1, txt: null } }
+-> { database: "shard_1", table: "null_bootstraps", type: "bootstrap-complete", primary_key: "null", data: {}}
