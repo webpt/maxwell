@@ -181,7 +181,10 @@ public class RowMap implements Serializable {
 
 	private void writeEncryptedMapToJSON(String jsonMapName, LinkedHashMap<String, Object> data, boolean includeNullField, String encryption_key, String secret_key) throws IOException{
 		JsonGenerator generator = jsonGeneratorThreadLocal.get();
-		JSONObject obj = new JSONObject();
+		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+		JsonGenerator obj = jsonFactory.createGenerator(outputStream);
+
+		obj.writeStartObject();
 		for (String key : data.keySet()) {
 			Object value = data.get(key);
 
@@ -191,15 +194,23 @@ public class RowMap implements Serializable {
 			if ( value instanceof List ) { // sets come back from .asJSON as lists, and jackson can't deal with lists natively.
 				List stringList = (List) value;
 
-				obj.put(key, stringList);
+				obj.writeArrayFieldStart(key);
+				for ( Object s : stringList )  {
+					obj.writeObject(s);
+				}
+				obj.writeEndArray();
 			} else if (value instanceof RawJSONString) {
-				obj.put(key, ((RawJSONString) value).json);
+				// JSON column type, using binlog-connector's serializers.
+				obj.writeFieldName(key);
+				obj.writeRawValue(((RawJSONString) value).json);
 			} else {
-				obj.put(key, value);
+				obj.writeObjectField(key, value);
 			}
 		}
-
-		generator.writeStringField(jsonMapName, RowEncrypt.encrypt(obj.toString(), encryption_key, secret_key));
+		obj.writeEndObject();
+		obj.close();
+		outputStream.close();
+		generator.writeStringField(jsonMapName, RowEncrypt.encrypt(outputStream.toString(), encryption_key, secret_key));
 	}
 
 	private void writeMapToJSON(String jsonMapName, LinkedHashMap<String, Object> data, boolean includeNullField) throws IOException {
