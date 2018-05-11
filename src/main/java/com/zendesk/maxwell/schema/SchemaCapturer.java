@@ -199,10 +199,10 @@ public class SchemaCapturer {
 		pkPreparedStatement.setString(1, db.getName());
 		ResultSet rs = pkPreparedStatement.executeQuery();
 
-		HashMap<String, ArrayList<String>> l = new HashMap<>();
+		HashMap<String, ArrayList<String>> tablePKMap = new HashMap<>();
 
 		for (String tableName : tables.keySet()) {
-			l.put(tableName, new ArrayList<String>());
+			tablePKMap.put(tableName, new ArrayList<String>());
 		}
 
 		while (rs.next()) {
@@ -210,7 +210,9 @@ public class SchemaCapturer {
 			String tableName = rs.getString("TABLE_NAME");
 			String columnName = rs.getString("COLUMN_NAME");
 
-			l.get(tableName).add(ordinalPosition - 1, columnName);
+			ArrayList<String> pkList = tablePKMap.get(tableName);
+			if ( pkList != null )
+				pkList.add(ordinalPosition - 1, columnName);
 		}
 		rs.close();
 
@@ -218,7 +220,7 @@ public class SchemaCapturer {
 			String key = entry.getKey();
 			Table table = entry.getValue();
 
-			table.setPKList(l.get(key));
+			table.setPKList(tablePKMap.get(key));
 		}
 	}
 
@@ -247,5 +249,5 @@ public class SchemaCapturer {
 		}
 		return result.toArray(new String[0]);
 	}
-	
+
 }

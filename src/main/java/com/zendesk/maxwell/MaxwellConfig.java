@@ -87,6 +87,7 @@ public class MaxwellConfig extends AbstractConfig {
 	public String metricsDatadogHost;
 	public int metricsDatadogPort;
 	public Long metricsDatadogInterval;
+	public boolean metricsJvm;
 
 	public MaxwellDiagnosticContext.Config diagnosticConfig;
 
@@ -230,7 +231,7 @@ public class MaxwellConfig extends AbstractConfig {
 		parser.accepts( "client_id", "unique identifier for this maxwell replicator" ).withRequiredArg();
 		parser.accepts( "schema_database", "database name for maxwell state (schema and binlog position)" ).withRequiredArg();
 		parser.accepts( "max_schemas", "deprecated." ).withRequiredArg();
-		parser.accepts( "init_position", "initial binlog position, given as BINLOG_FILE:POSITION:HEARTBEAT" ).withRequiredArg();
+		parser.accepts( "init_position", "initial binlog position, given as BINLOG_FILE:POSITION[:HEARTBEAT]" ).withRequiredArg();
 		parser.accepts( "replay", "replay mode, don't store any information to the server" ).withOptionalArg();
 		parser.accepts( "master_recovery", "(experimental) enable master position recovery code" ).withOptionalArg();
 		parser.accepts( "gtid_mode", "(experimental) enable gtid mode" ).withOptionalArg();
@@ -289,6 +290,7 @@ public class MaxwellConfig extends AbstractConfig {
 		parser.accepts( "metrics_datadog_port", "the port to publish metrics to when metrics_datadog_type = udp" ).withRequiredArg();
 		parser.accepts( "http_diagnostic", "enable http diagnostic endpoint: true|false. default: false" ).withOptionalArg();
 		parser.accepts( "http_diagnostic_timeout", "the http diagnostic response timeout in ms when http_diagnostic=true. default: 10000" ).withRequiredArg();
+		parser.accepts( "metrics_jvm", "enable jvm metrics: true|false. default: false" ).withRequiredArg();
 
 		parser.accepts( "__separator_11" );
 
@@ -447,6 +449,8 @@ public class MaxwellConfig extends AbstractConfig {
 		this.metricsDatadogPort = Integer.parseInt(fetchOption("metrics_datadog_port", options, properties, "8125"));
 		this.metricsDatadogInterval = fetchLongOption("metrics_datadog_interval", options, properties, 60L);
 
+		this.metricsJvm = fetchBooleanOption("metrics_jvm", options, properties, false);
+
 		this.diagnosticConfig = new MaxwellDiagnosticContext.Config();
 		this.diagnosticConfig.enable = fetchBooleanOption("http_diagnostic", options, properties, false);
 		this.diagnosticConfig.timeout = fetchLongOption("http_diagnostic_timeout", options, properties, 10000L);
@@ -463,7 +467,7 @@ public class MaxwellConfig extends AbstractConfig {
 			String initPosition = (String) options.valueOf("init_position");
 			String[] initPositionSplit = initPosition.split(":");
 
-			if (initPositionSplit.length != 3)
+			if (initPositionSplit.length < 2)
 				usageForOptions("Invalid init_position: " + initPosition, "--init_position");
 
 			Long pos = 0L;
@@ -474,10 +478,12 @@ public class MaxwellConfig extends AbstractConfig {
 			}
 
 			Long lastHeartbeat = 0L;
-			try {
-				lastHeartbeat = Long.valueOf(initPositionSplit[2]);
-			} catch (NumberFormatException e) {
-				usageForOptions("Invalid init_position: " + initPosition, "--init_position");
+			if ( initPositionSplit.length > 2 ) {
+				try {
+					lastHeartbeat = Long.valueOf(initPositionSplit[2]);
+				} catch (NumberFormatException e) {
+					usageForOptions("Invalid init_position: " + initPosition, "--init_position");
+				}
 			}
 
 			this.initPosition = new Position(new BinlogPosition(pos, initPositionSplit[0]), lastHeartbeat);
