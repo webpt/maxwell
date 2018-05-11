@@ -1,17 +1,24 @@
 package com.zendesk.maxwell.schema.ddl;
 
-import com.zendesk.maxwell.CaseSensitivity;
-import com.zendesk.maxwell.Mysql57Tests;
-import org.junit.After;
-import org.junit.Before;
+import com.zendesk.maxwell.*;
+import com.zendesk.maxwell.producer.MaxwellOutputConfig;
+import com.zendesk.maxwell.row.RowMap;
 import org.junit.Test;
 
-import com.zendesk.maxwell.MaxwellTestWithIsolatedServer;
-import com.zendesk.maxwell.MaxwellTestSupport;
 import org.junit.experimental.categories.Category;
-import org.junit.runners.Suite;
+
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class DDLIntegrationTest extends MaxwellTestWithIsolatedServer {
+	private MaxwellOutputConfig ddlOutputConfig() {
+		MaxwellOutputConfig config = new MaxwellOutputConfig();
+		config.outputDDL = true;
+		return config;
+	}
+
 	private void testIntegration(String[] alters) throws Exception {
 		MaxwellTestSupport.testDDLFollowing(server, alters);
 	}
@@ -74,19 +81,19 @@ public class DDLIntegrationTest extends MaxwellTestWithIsolatedServer {
 
 	@Test
 	public void testJSON() throws Exception {
-		if ( server.getVersion().equals("5.7") ) {
-			String sql[] = {
-				"create table shard_1.testJSON ( j json )",
-			};
+		requireMinimumVersion(server.VERSION_5_7);
+		String sql[] = {
+			"create table shard_1.testJSON ( j json )",
+		};
 
-			testIntegration(sql);
-		}
+		testIntegration(sql);
 	}
 
 	@Test
 	public void testCreateAndDropDatabase() throws Exception {
 		String sql[] = {
 			"create DATABASE test_db default character set='utf8'",
+			"create DATABASE test_db_1 default char set='utf8'",
 			"create DATABASE if not exists test_db",
 			"create DATABASE test_db_2",
 			"drop DATABASE test_db"
@@ -210,8 +217,7 @@ public class DDLIntegrationTest extends MaxwellTestWithIsolatedServer {
 
 	@Test
 	public void testTimeWithLength() throws Exception {
-		if ( !server.getVersion().equals("5.6") )
-			return;
+		requireMinimumVersion(server.VERSION_5_6);
 
 		String sql[] = {
 			"create TABLE `test_time` ( id time(3) )"
@@ -222,8 +228,7 @@ public class DDLIntegrationTest extends MaxwellTestWithIsolatedServer {
 
 	@Test
 	public void testDatetimeWithLength() throws Exception {
-		if ( !server.getVersion().equals("5.6") )
-			return;
+		requireMinimumVersion(server.VERSION_5_6);
 
 		String sql[] = {
 			"create TABLE `test_datetime` ( id datetime(3) )",
@@ -235,8 +240,7 @@ public class DDLIntegrationTest extends MaxwellTestWithIsolatedServer {
 
 	@Test
 	public void testTimestampWithLength() throws Exception {
-		if ( !server.getVersion().equals("5.6") )
-			return;
+		requireMinimumVersion(server.VERSION_5_6);
 
 		String sql[] = {
 			"create TABLE `test_year` ( id timestamp(3) )"
@@ -286,6 +290,20 @@ public class DDLIntegrationTest extends MaxwellTestWithIsolatedServer {
 	}
 
 	@Test
+	public void testCompatibilityColumnTypes() throws Exception {
+		String sql[] = {
+			"create TABLE t1( a FIXED )",
+			"create TABLE t2( a float4 )",
+			"create TABLE t3( a float8 )",
+			"create table t4( a middleint )",
+			"create table t5( a numeric )",
+
+		};
+
+		testIntegration(sql);
+	}
+
+	@Test
 	public void testASCIICharset() throws Exception {
 		String sql[] = {
 			"create TABLE t1( a varchar(255) ASCII, b enum('a', 'b') ASCII )"
@@ -293,6 +311,23 @@ public class DDLIntegrationTest extends MaxwellTestWithIsolatedServer {
 
 		testIntegration(sql);
 	}
+
+	@Test
+	public void testDoubleQuotedTables() throws Exception {
+		String sql[] = {
+			"create DATABASE \"tt_db\"",
+			"create table \"tt_db\".\"tt_tt\" ( \"id\" int )",
+			"create table \"tt_db\".\"`weird_quote`\" ( \"id\" int )",
+		};
+
+		server.execute("SET @old_mode = @@SESSION.sql_mode");
+		server.execute("SET SESSION sql_mode = CONCAT('ANSI_QUOTES,', @@SESSION.sql_mode)");
+
+
+		testIntegration(sql);
+		server.execute("SET SESSION sql_mode = @old_mode");
+	}
+
 
 	@Test
 	public void testNationChar() throws Exception {
@@ -369,12 +404,69 @@ public class DDLIntegrationTest extends MaxwellTestWithIsolatedServer {
 	@Test
 	@Category(Mysql57Tests.class)
 	public void testGeneratedColumns() throws Exception {
-		if ( server.getVersion().equals("5.7") ) {
-			testIntegration("create table t ("
-				+ "a INT GENERATED ALWAYS AS (0) VIRTUAL UNIQUE NOT NULL, "
-				+ "b int AS (a + 0) STORED PRIMARY KEY"
-				+ ")"
-			);
-		}
+		requireMinimumVersion(server.VERSION_5_7);
+		testIntegration("create table t ("
+			+ "a INT GENERATED ALWAYS AS (0) VIRTUAL UNIQUE NOT NULL, "
+			+ "b int AS (a + 0) STORED PRIMARY KEY"
+			+ ")"
+		);
+	}
+
+	@Test
+	public void testTableCreate() throws Exception {
+		String[] sql = {"create table TestTableCreate1 ( account_id int, text_field text )"};
+		List<RowMap> rows = getRowsForDDLTransaction(sql, null);
+		assertEquals(1, rows.size());
+		assertTrue(rows.get(0).toJSON(ddlOutputConfig()).contains("\"type\":\"table-create\",\"database\":\"mysql\",\"table\":\"TestTableCreate1\""));
+	}
+
+	@Test
+	public void testTableCreateFilter() throws Exception {
+		String[] sql = {"create table TestTableCreate2 ( account_id int, text_field text )"};
+		List<RowMap> rows = getRowsForDDLTransaction(sql, excludeTable("TestTableCreate2"));
+		assertEquals(0, rows.size());
+	}
+
+	@Test
+	public void testTableRenameFilter() throws Exception {
+		String[] sql = {
+			"create table TestTableCreate3 ( account_id int, text_field text )",
+			"rename table TestTableCreate3 to TestTableCreate4"
+		};
+		List<RowMap> rows = getRowsForDDLTransaction(sql, excludeTable("TestTableCreate4"));
+		assertEquals(1, rows.size());
+		assertTrue(rows.get(0).toJSON(ddlOutputConfig()).contains("\"type\":\"table-create\",\"database\":\"mysql\",\"table\":\"TestTableCreate3\""));
+	}
+
+	@Test
+	public void testDatabaseCreate() throws Exception {
+		String[] sql = {
+			"create database TestDatabaseCreate1",
+			"alter database TestDatabaseCreate1 character set latin2"
+		};
+		List<RowMap> rows = getRowsForDDLTransaction(sql, null);
+		assertEquals(2, rows.size());
+		assertTrue(rows.get(0).toJSON(ddlOutputConfig()).contains("\"type\":\"database-create\",\"database\":\"TestDatabaseCreate1\""));
+		assertTrue(rows.get(1).toJSON(ddlOutputConfig()).contains("\"type\":\"database-alter\",\"database\":\"TestDatabaseCreate1\""));
+	}
+
+	@Test
+	public void testDatabaseFilter() throws Exception {
+		String[] sql = {"create database TestDatabaseCreate2"};
+		List<RowMap> rows = getRowsForDDLTransaction(sql, excludeDb("TestDatabaseCreate2"));
+		assertEquals(0, rows.size());
+	}
+
+	@Test
+	public void testDatabaseChangeWithTableFilter() throws Exception {
+		String[] sql = {
+				"create database TestDatabaseCreate3",
+				"create table `TestDatabaseCreate3`.`chicken` ( id int )",
+				"create table `TestDatabaseCreate3`.`burger` ( id int )"
+		};
+		List<RowMap> rows = getRowsForDDLTransaction(sql, excludeTable("chicken"));
+		assertEquals(2, rows.size());
+		assertTrue(rows.get(0).toJSON(ddlOutputConfig()).contains("\"type\":\"database-create\",\"database\":\"TestDatabaseCreate3\""));
+		assertTrue(rows.get(1).toJSON(ddlOutputConfig()).contains("\"type\":\"table-create\",\"database\":\"TestDatabaseCreate3\",\"table\":\"burger\""));
 	}
 }

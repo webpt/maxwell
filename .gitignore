@@ -9,3 +9,7 @@ config/*.yml
 .DS_Store
 /test.log
 .sw?
+/config
+.classpath
+.project
+.settings/

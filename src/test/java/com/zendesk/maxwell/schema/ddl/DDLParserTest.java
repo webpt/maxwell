@@ -176,6 +176,7 @@ public class DDLParserTest {
 			"alter table t alter column `foo` SET DEFAULT 'foo'",
 			"alter table t alter column `foo` SET DEFAULT true",
 			"alter table t alter column `foo` SET DEFAULT false",
+			"alter table t alter column `foo` SET DEFAULT -1",
 			"alter table t alter column `foo` drop default",
 			"alter table t CHARACTER SET latin1 COLLATE = 'utf8'",
 			"ALTER TABLE `test` ENGINE=`InnoDB` CHARACTER SET latin1",
@@ -203,9 +204,14 @@ public class DDLParserTest {
 			"ALTER TABLE .`users` CHANGE COLUMN `password` `password` VARCHAR(60) CHARACTER SET 'utf8' COLLATE 'utf8_bin' NULL DEFAULT NULL COMMENT 'Length 60 for Bcrypt'",
 			"create table `shard1.foo` ( `id.foo` int ) collate = `utf8_bin`",
 			"create table if not exists audit_payer_bank_details (event_time TIMESTAMP default CURRENT_TIMESTAMP())",
+			"create table if not exists audit_bank_payer_details (event_time TIMESTAMP default LOCALTIME())",
+			"create table nobody_pays_noone (event_time TIMESTAMP default localtimestamp)",
 			"ALTER TABLE foo RENAME INDEX index_quote_request_follow_on_data_on_model_name TO index_quote_request_follow_on_data_on_model_class_name",
 			"ALTER TABLE foo DROP COLUMN `ducati` CASCADE",
-			"CREATE TABLE account_groups ( visible_to_all CHAR(1) DEFAULT 'N' NOT NULL CHECK (visible_to_all IN ('Y','N')))"
+			"CREATE TABLE account_groups ( visible_to_all CHAR(1) DEFAULT 'N' NOT NULL CHECK (visible_to_all IN ('Y','N')))",
+			"ALTER TABLE \"foo\" drop column a", // ansi-double-quoted tables
+			"create table vc11( id serial, name varchar(10) not null default \"\")"
+
 		};
 
 		for ( String s : testSQL ) {
@@ -457,6 +463,12 @@ public class DDLParserTest {
 	@Test
 	public void testAlterOrderBy() {
 		assertThat(parseAlter("ALTER TABLE t1 ORDER BY t1.id, t1.status, t1.type_id, t1.user_id, t1.body"), is(notNullValue()));
+	}
+
+	@Test
+	public void testCreateSchemaCharSet() {
+		List<SchemaChange> changes = parse("CREATE SCHEMA IF NOT EXISTS `tblname` CHARACTER SET = default");
+		assertThat(changes.size(), is(1));
 	}
 
 	@Test

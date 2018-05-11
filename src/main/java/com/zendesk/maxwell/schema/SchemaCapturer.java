@@ -2,7 +2,6 @@ package com.zendesk.maxwell.schema;
 
 import com.zendesk.maxwell.CaseSensitivity;
 import com.zendesk.maxwell.schema.columndef.ColumnDef;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -223,15 +222,30 @@ public class SchemaCapturer {
 		}
 	}
 
-	private static String[] extractEnumValues(String expandedType) {
-		String[] enumValues;
+	static String[] extractEnumValues(String expandedType) {
 		Matcher matcher = Pattern.compile("(enum|set)\\((.*)\\)").matcher(expandedType);
 		matcher.matches(); // why do you tease me so.
+		String enumValues = matcher.group(2);
 
-		enumValues = StringUtils.split(matcher.group(2), ",");
-		for (int j = 0; j < enumValues.length; j++) {
-			enumValues[j] = enumValues[j].substring(1, enumValues[j].length() - 1);
+		if (!(enumValues.endsWith(","))) {
+			enumValues += ",";
 		}
-		return enumValues;
+
+		String regex = "('.*?'),";
+		Pattern pattern = Pattern.compile(regex);
+		Matcher enumMatcher = pattern.matcher(enumValues);
+
+		List<String> result = new ArrayList<>();
+		while(enumMatcher.find()) {
+			String value = enumMatcher.group(0);
+			if (value.startsWith("'"))
+				value = value.substring(1);
+			if (value.endsWith("',")) {
+				value = value.substring(0, value.length() - 2);
+			}
+			result.add(value);
+		}
+		return result.toArray(new String[0]);
 	}
+	
 }

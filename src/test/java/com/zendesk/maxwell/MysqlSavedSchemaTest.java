@@ -5,13 +5,16 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.sql.SQLException;
 import java.sql.Connection;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import com.google.common.collect.Lists;
 import com.zendesk.maxwell.replication.BinlogPosition;
+import com.zendesk.maxwell.replication.Position;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Before;
 import org.junit.Test;
@@ -25,8 +28,9 @@ import com.zendesk.maxwell.schema.columndef.TimeColumnDef;
 
 public class MysqlSavedSchemaTest extends MaxwellTestWithIsolatedServer {
 	private Schema schema;
-	private BinlogPosition binlogPosition;
+	private Position position;
 	private MysqlSavedSchema savedSchema;
+	private CaseSensitivity caseSensitivity = CaseSensitivity.CASE_SENSITIVE;
 
 	String ary[] = {
 			"delete from `maxwell`.`positions`",
@@ -43,17 +47,17 @@ public class MysqlSavedSchemaTest extends MaxwellTestWithIsolatedServer {
 
 	@Before
 	public void setUp() throws Exception {
-		if ( server.getVersion().equals("5.6") ) {
+		if ( server.getVersion().atLeast(server.VERSION_5_6) ) {
 			schemaSQL.add("CREATE TABLE shard_1.time_with_length (id int (11), dt2 datetime(3), ts2 timestamp(6), t2 time(6))");
 			schemaSQL.add("CREATE TABLE shard_1.without_col_length (badcol datetime(3))");
 		}
 
 		server.executeList(schemaSQL);
 
-		this.binlogPosition = MaxwellTestSupport.capture(server.getConnection());
-		this.context = buildContext(binlogPosition);
+		this.position = MaxwellTestSupport.capture(server.getConnection());
+		this.context = buildContext(position);
 		this.schema = new SchemaCapturer(server.getConnection(), context.getCaseSensitivity()).capture();
-		this.savedSchema = new MysqlSavedSchema(this.context, this.schema, binlogPosition);
+		this.savedSchema = SavedSchemaSupport.getSavedSchema(this.context, this.schema, this.position);
 	}
 
 	@Test
@@ -92,8 +96,7 @@ public class MysqlSavedSchemaTest extends MaxwellTestWithIsolatedServer {
 
 	@Test
 	public void testTimeWithLengthCase() throws Exception {
-		if ( !server.getVersion().equals("5.6") )
-			return;
+		requireMinimumVersion(server.VERSION_5_6);
 
 		this.savedSchema.save(context.getMaxwellConnection());
 
@@ -148,8 +151,7 @@ public class MysqlSavedSchemaTest extends MaxwellTestWithIsolatedServer {
 
 	@Test
 	public void testUpgradeAddColumnLength() throws Exception {
-		if ( !server.getVersion().equals("5.6") )
-			return;
+		requireMinimumVersion(server.VERSION_5_6);
 
 		Connection c = context.getMaxwellConnection();
 		this.savedSchema.save(c);
@@ -164,8 +166,7 @@ public class MysqlSavedSchemaTest extends MaxwellTestWithIsolatedServer {
 
 	@Test
 	public void testUpgradeAddColumnLengthForExistingSchemas() throws Exception {
-		if ( !server.getVersion().equals("5.6") )
-			return;
+		requireMinimumVersion(server.VERSION_5_6);
 
 		Connection c = context.getMaxwellConnection();
 		this.savedSchema.save(c);
@@ -181,5 +182,193 @@ public class MysqlSavedSchemaTest extends MaxwellTestWithIsolatedServer {
 		DateTimeColumnDef cd = (DateTimeColumnDef) restored.getSchema().findDatabase("shard_1").findTable("without_col_length").findColumn("badcol");
 
 		assertEquals((Long) 3L, (Long) cd.getColumnLength());
+	}
+
+	@Test
+	public void testTableWithSameNameInTwoDBs() throws Exception {
+		String sql[] = {
+			"create database dd1",
+			"create database dd2",
+			"create TABLE dd1.t1( i int )",
+			"create TABLE dd2.t1( i int )",
+
+		};
+
+		server.executeList(sql);
+		this.schema = new SchemaCapturer(server.getConnection(), context.getCaseSensitivity()).capture();
+		this.savedSchema = SavedSchemaSupport.getSavedSchema(this.context, this.schema, this.position);
+		Connection c = context.getMaxwellConnection();
+		this.savedSchema.save(c);
+
+		MysqlSavedSchema restoredSchema = MysqlSavedSchema.restore(context, context.getInitialPosition());
+
+		Table t = restoredSchema.getSchema().findDatabase("dd2").findTable("t1");
+		assertThat(t, not(nullValue()));
+	}
+
+
+	private Schema buildSchema() {
+		String charset = Charset.defaultCharset().toString();
+		List<Database> databases = new ArrayList<>();
+		return new Schema(databases, charset, caseSensitivity);
+	}
+
+	private void populateSchemasSurroundingTarget(
+			Connection c,
+			Long serverId,
+			Position targetPosition,
+			Long lastHeartbeat,
+			String previousFile,
+			String newerFile
+	) throws SQLException {
+
+		BinlogPosition targetBinlog = targetPosition.getBinlogPosition();
+
+		// newer binlog file
+		new MysqlSavedSchema(
+			serverId, caseSensitivity,
+			buildSchema(),
+			makePosition(targetBinlog.getOffset() - 100L, newerFile, lastHeartbeat)
+		).saveSchema(c);
+
+		// newer binlog position
+		new MysqlSavedSchema(
+			serverId, caseSensitivity,
+			buildSchema(),
+			makePosition(targetBinlog.getOffset() + 100L, targetBinlog.getFile(), lastHeartbeat)
+		).saveSchema(c);
+
+		// different server ID
+		new MysqlSavedSchema(
+			serverId + 1L, caseSensitivity,
+			buildSchema(),
+			targetPosition
+		).saveSchema(c);
+
+		// older binlog file
+		new MysqlSavedSchema(
+			serverId, caseSensitivity,
+			buildSchema(),
+			makePosition(targetBinlog.getOffset(), previousFile, lastHeartbeat)
+		).saveSchema(c);
+	}
+
+	private Position makePosition(long position, String file, Long lastHeartbeat) {
+		return new Position(new BinlogPosition(position, file), lastHeartbeat);
+	}
+
+	@Test
+	public void testFindSchemaReturnsTheLatestSchemaForTheCurrentBinlog() throws Exception {
+		if (context.getConfig().gtidMode) {
+			return;
+		}
+
+		Connection c = context.getMaxwellConnection();
+
+		long serverId = 100;
+		long targetPosition = 500;
+		long lastHeartbeat = 9000L;
+		String targetFile = "binlog08";
+		String previousFile = "binlog07";
+		String newerFile = "binlog09";
+		Position targetBinlogPosition = makePosition(targetPosition, targetFile, lastHeartbeat + 10L);
+
+		MysqlSavedSchema expectedSchema = new MysqlSavedSchema(serverId, caseSensitivity,
+			buildSchema(),
+			makePosition(targetPosition - 50L, targetFile, lastHeartbeat)
+		);
+		expectedSchema.save(c);
+
+		// older binlog position
+		new MysqlSavedSchema(
+			serverId, caseSensitivity,
+			buildSchema(),
+			makePosition(targetPosition - 200L, targetFile, lastHeartbeat)
+		).saveSchema(c);
+
+		// Newer binlog position but older heartbeat
+		new MysqlSavedSchema(
+				serverId, caseSensitivity,
+				buildSchema(),
+				makePosition(targetPosition - 1L, targetFile, lastHeartbeat - 1000L)
+		).saveSchema(c);
+
+		populateSchemasSurroundingTarget(c, serverId, targetBinlogPosition, lastHeartbeat, previousFile, newerFile);
+
+		MysqlSavedSchema foundSchema = MysqlSavedSchema.restore(context.getMaxwellConnectionPool(),
+			serverId, caseSensitivity, targetBinlogPosition);
+		assertThat(foundSchema.getBinlogPosition(), equalTo(expectedSchema.getBinlogPosition()));
+		assertThat(foundSchema.getSchemaID(), equalTo(expectedSchema.getSchemaID()));
+	}
+
+	@Test
+	public void testFindBaseSchemaIdIfTheLatestSchemaPositionIsTheCurrentPosition() throws Exception {
+		if (context.getConfig().gtidMode) {
+			return;
+		}
+		Connection c = context.getMaxwellConnection();
+		long serverId = 100;
+		long targetPosition = 500;
+		long lastHeartbeat = 9000L;
+		String targetFile = "binlog01";
+		Position targetBinlogPosition = makePosition(targetPosition, targetFile, lastHeartbeat + 10L);
+
+		//base binlog position
+		MysqlSavedSchema baseSchema = new MysqlSavedSchema(
+				serverId, caseSensitivity,
+				buildSchema(),
+				makePosition(targetPosition - 200L, targetFile, lastHeartbeat)
+		);
+		baseSchema.save(c);
+
+		MysqlSavedSchema newSchema = new MysqlSavedSchema(serverId, caseSensitivity,
+				buildSchema(),
+				makePosition(targetPosition, targetFile, lastHeartbeat),
+				baseSchema.getSchemaID(),
+				Lists.newArrayList()
+		);
+		newSchema.save(c);
+
+		MysqlSavedSchema foundSchema = MysqlSavedSchema.restore(context.getMaxwellConnectionPool(),
+				serverId, caseSensitivity, targetBinlogPosition);
+
+		assertThat(foundSchema.getSchemaID(), equalTo(baseSchema.getSchemaID()));
+	}
+
+	@Test
+	public void testFindSchemaReturnsTheLatestSchemaForPreviousBinlog() throws Exception {
+		if (context.getConfig().gtidMode) {
+			return;
+		}
+
+		Connection c = context.getMaxwellConnection();
+		long serverId = 100;
+		long targetPosition = 500;
+		long lastHeartbeat = 9000L;
+		String targetFile = "binlog08";
+		String previousFile = "binlog07";
+		String newerFile = "binlog09";
+		Position targetBinlogPosition = makePosition(targetPosition, targetFile, lastHeartbeat + 10L);
+
+		// the newest schema:
+		MysqlSavedSchema expectedSchema = new MysqlSavedSchema(serverId, caseSensitivity,
+				buildSchema(),
+				makePosition(targetPosition + 50L, previousFile, lastHeartbeat)
+		);
+		expectedSchema.save(c);
+
+		// Newer binlog position but older heartbeat
+		new MysqlSavedSchema(
+				serverId, caseSensitivity,
+				buildSchema(),
+				makePosition(targetPosition - 1L, targetFile, lastHeartbeat - 1000L)
+		).saveSchema(c);
+
+		populateSchemasSurroundingTarget(c, serverId, targetBinlogPosition, lastHeartbeat, previousFile, newerFile);
+
+		MysqlSavedSchema foundSchema = MysqlSavedSchema.restore(context.getMaxwellConnectionPool(),
+			serverId, caseSensitivity, targetBinlogPosition);
+		assertThat(foundSchema.getBinlogPosition(), equalTo(expectedSchema.getBinlogPosition()));
+		assertThat(foundSchema.getSchemaID(), equalTo(expectedSchema.getSchemaID()));
 	}
 }

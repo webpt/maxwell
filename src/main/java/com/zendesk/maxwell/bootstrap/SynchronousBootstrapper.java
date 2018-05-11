@@ -2,6 +2,7 @@ package com.zendesk.maxwell.bootstrap;
 
 import com.zendesk.maxwell.replication.BinlogPosition;
 import com.zendesk.maxwell.MaxwellContext;
+import com.zendesk.maxwell.replication.Position;
 import com.zendesk.maxwell.replication.Replicator;
 import com.zendesk.maxwell.row.RowMap;
 import com.zendesk.maxwell.producer.AbstractProducer;
@@ -13,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.sql.*;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
@@ -49,7 +51,7 @@ public class SynchronousBootstrapper extends AbstractBootstrapper {
 		Database database = findDatabase(schema, databaseName);
 		Table table = findTable(tableName, database);
 
-		BinlogPosition position = startBootstrapRow.getPosition();
+		Position position = startBootstrapRow.getPosition();
 		producer.push(startBootstrapRow);
 		producer.push(bootstrapStartRowMap(table, position));
 		LOGGER.info(String.format("bootstrapping started for %s.%s, binlog position is %s", databaseName, tableName, position.toString()));
@@ -68,7 +70,7 @@ public class SynchronousBootstrapper extends AbstractBootstrapper {
 
 				producer.push(row);
 				++insertedRows;
-				updateInsertedRowsColumn(insertedRows, startBootstrapRow, position, connection);
+				updateInsertedRowsColumn(insertedRows, startBootstrapRow, position.getBinlogPosition(), connection);
 			}
 			setBootstrapRowToCompleted(insertedRows, startBootstrapRow, connection);
 		}
@@ -97,26 +99,26 @@ public class SynchronousBootstrapper extends AbstractBootstrapper {
 		return conn;
 	}
 
-	protected Connection getStreamingConnection() throws SQLException {
+	protected Connection getStreamingConnection() throws SQLException, URISyntaxException {
 		Connection conn = DriverManager.getConnection(context.getConfig().replicationMysql.getConnectionURI(), context.getConfig().replicationMysql.user, context.getConfig().replicationMysql.password);
 		conn.setCatalog(context.getConfig().databaseName);
 		return conn;
 	}
 
-	private RowMap bootstrapStartRowMap(Table table, BinlogPosition position) {
+	private RowMap bootstrapStartRowMap(Table table, Position position) {
 		return bootstrapEventRowMap("bootstrap-start", table, position);
 	}
 
-	private RowMap bootstrapCompleteRowMap(Table table, BinlogPosition position) {
+	private RowMap bootstrapCompleteRowMap(Table table, Position position) {
 		return bootstrapEventRowMap("bootstrap-complete", table, position);
 	}
 
-	private RowMap bootstrapEventRowMap(String type, Table table, BinlogPosition position) {
+	private RowMap bootstrapEventRowMap(String type, Table table, Position position) {
 		return new RowMap(
 				type,
 				table.getDatabase(),
 				table.getName(),
-				System.currentTimeMillis() / 1000,
+				System.currentTimeMillis(),
 				table.getPKList(),
 				position);
 	}
@@ -130,7 +132,7 @@ public class SynchronousBootstrapper extends AbstractBootstrapper {
 		ensureTable(tableName, database);
 		Table table = findTable(tableName, database);
 
-		BinlogPosition position = completeBootstrapRow.getPosition();
+		Position position = completeBootstrapRow.getPosition();
 		producer.push(completeBootstrapRow);
 		producer.push(bootstrapCompleteRowMap(table, position));
 

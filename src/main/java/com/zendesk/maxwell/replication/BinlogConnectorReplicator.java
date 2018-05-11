@@ -1,16 +1,21 @@
 package com.zendesk.maxwell.replication;
 
+import com.codahale.metrics.Histogram;
 import com.github.shyiko.mysql.binlog.BinaryLogClient;
 import com.github.shyiko.mysql.binlog.event.*;
 import com.github.shyiko.mysql.binlog.event.deserialization.EventDeserializer;
+import com.github.shyiko.mysql.binlog.network.SSLMode;
 import com.zendesk.maxwell.MaxwellContext;
-import com.zendesk.maxwell.MaxwellFilter;
 import com.zendesk.maxwell.MaxwellMysqlConfig;
 import com.zendesk.maxwell.bootstrap.AbstractBootstrapper;
+import com.zendesk.maxwell.monitoring.Metrics;
 import com.zendesk.maxwell.producer.AbstractProducer;
 import com.zendesk.maxwell.row.RowMap;
 import com.zendesk.maxwell.row.RowMapBuffer;
-import com.zendesk.maxwell.schema.*;
+import com.zendesk.maxwell.schema.Schema;
+import com.zendesk.maxwell.schema.SchemaStore;
+import com.zendesk.maxwell.schema.SchemaStoreException;
+import com.zendesk.maxwell.schema.Table;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,17 +28,18 @@ public class BinlogConnectorReplicator extends AbstractReplicator implements Rep
 	private final long MAX_TX_ELEMENTS = 10000;
 	protected SchemaStore schemaStore;
 
-	private MaxwellFilter filter;
-
 	private final LinkedBlockingDeque<BinlogConnectorEvent> queue = new LinkedBlockingDeque<>(20);
 
-	protected BinlogConnectorEventListener binlogEventListener;
+	private BinlogConnectorEventListener binlogEventListener;
+	private BinlogConnectorLifecycleListener binlogLifecycleListener;
 
 	private final BinaryLogClient client;
 
 	static final Logger LOGGER = LoggerFactory.getLogger(BinlogConnectorReplicator.class);
 	private final boolean stopOnEOF;
 	private boolean hitEOF = false;
+	private Histogram transactionRowCount;
+	private Histogram transactionExecutionTime;
 
 	public BinlogConnectorReplicator(
 		SchemaStore schemaStore,
@@ -41,51 +47,63 @@ public class BinlogConnectorReplicator extends AbstractReplicator implements Rep
 		AbstractBootstrapper bootstrapper,
 		MaxwellMysqlConfig mysqlConfig,
 		Long replicaServerID,
-		PositionStoreThread positionStoreThread,
 		String maxwellSchemaDatabaseName,
-		BinlogPosition start,
+		Metrics metrics,
+		Position start,
 		boolean stopOnEOF,
-		String clientID
+		String clientID,
+		HeartbeatNotifier heartbeatNotifier
 	) {
-		super(clientID, bootstrapper, positionStoreThread, maxwellSchemaDatabaseName, producer);
+		super(clientID, bootstrapper, maxwellSchemaDatabaseName, producer, metrics, start, heartbeatNotifier);
 		this.schemaStore = schemaStore;
+		transactionExecutionTime = metrics.getRegistry().histogram(metrics.metricName("transaction", "execution_time"));
+		transactionRowCount = metrics.getRegistry().histogram(metrics.metricName("transaction", "row_count"));
 
 		this.client = new BinaryLogClient(mysqlConfig.host, mysqlConfig.port, mysqlConfig.user, mysqlConfig.password);
-		if (start.getGtidSetStr() != null) {
-			String gtidStr = start.getGtidSetStr();
+		this.client.setSSLMode(mysqlConfig.sslMode);
+
+		BinlogPosition startBinlog = start.getBinlogPosition();
+		if (startBinlog.getGtidSetStr() != null) {
+			String gtidStr = startBinlog.getGtidSetStr();
 			LOGGER.info("Setting initial gtid to: " + gtidStr);
 			this.client.setGtidSet(gtidStr);
 		} else {
-			LOGGER.info("Setting initial binlog pos to: " + start.getFile() + ":" + start.getOffset());
-			this.client.setBinlogFilename(start.getFile());
-			this.client.setBinlogPosition(start.getOffset());
+			LOGGER.info("Setting initial binlog pos to: " + startBinlog.getFile() + ":" + startBinlog.getOffset());
+			this.client.setBinlogFilename(startBinlog.getFile());
+			this.client.setBinlogPosition(startBinlog.getOffset());
 		}
 
 		EventDeserializer eventDeserializer = new EventDeserializer();
-		eventDeserializer.setCompatibilityMode(EventDeserializer.CompatibilityMode.DATE_AND_TIME_AS_LONG_MICRO,
-			EventDeserializer.CompatibilityMode.CHAR_AND_BINARY_AS_BYTE_ARRAY);
+		eventDeserializer.setCompatibilityMode(
+			EventDeserializer.CompatibilityMode.DATE_AND_TIME_AS_LONG_MICRO,
+			EventDeserializer.CompatibilityMode.CHAR_AND_BINARY_AS_BYTE_ARRAY,
+			EventDeserializer.CompatibilityMode.INVALID_DATE_AND_TIME_AS_MIN_VALUE
+		);
 		this.client.setEventDeserializer(eventDeserializer);
+		this.binlogEventListener = new BinlogConnectorEventListener(client, queue, metrics);
+		this.binlogLifecycleListener = new BinlogConnectorLifecycleListener();
 
-		this.binlogEventListener = new BinlogConnectorEventListener(client, queue);
 		this.client.setBlocking(!stopOnEOF);
 		this.client.registerEventListener(binlogEventListener);
+		this.client.registerLifecycleListener(binlogLifecycleListener);
 		this.client.setServerId(replicaServerID.intValue());
 
 		this.stopOnEOF = stopOnEOF;
 	}
 
-	public BinlogConnectorReplicator(SchemaStore schemaStore, AbstractProducer producer, AbstractBootstrapper bootstrapper, MaxwellContext ctx, BinlogPosition start) throws SQLException {
+	public BinlogConnectorReplicator(SchemaStore schemaStore, AbstractProducer producer, AbstractBootstrapper bootstrapper, MaxwellContext ctx, Position start) throws SQLException {
 		this(
 			schemaStore,
 			producer,
 			bootstrapper,
 			ctx.getConfig().replicationMysql,
 			ctx.getConfig().replicaServerID,
-			ctx.getPositionStoreThread(),
 			ctx.getConfig().databaseName,
+			ctx.getMetrics(),
 			start,
 			false,
-			ctx.getConfig().clientID
+			ctx.getConfig().clientID,
+			ctx.getHeartbeatNotifier()
 		);
 	}
 
@@ -93,7 +111,8 @@ public class BinlogConnectorReplicator extends AbstractReplicator implements Rep
 		if ( !client.isConnected() && !stopOnEOF ) {
 			String gtidStr = client.getGtidSet();
 			String binlogPos = client.getBinlogFilename() + ":" + client.getBinlogPosition();
-			LOGGER.warn("replicator stopped at position: " + gtidStr == null ? binlogPos : gtidStr + " -- restarting");
+			String position = gtidStr == null ? binlogPos : gtidStr;
+			LOGGER.warn("replicator stopped at position: " + position + " -- restarting");
 			client.connect(5000);
 		}
 	}
@@ -128,9 +147,11 @@ public class BinlogConnectorReplicator extends AbstractReplicator implements Rep
 	 * @return A RowMapBuffer of rows; either in-memory or on disk.
 	 */
 
-	private RowMapBuffer getTransactionRows() throws Exception {
+	private RowMapBuffer getTransactionRows(BinlogConnectorEvent beginEvent) throws Exception {
 		BinlogConnectorEvent event;
 		RowMapBuffer buffer = new RowMapBuffer(MAX_TX_ELEMENTS);
+
+		String currentQuery = null;
 
 		while ( true ) {
 			event = pollEvent();
@@ -140,7 +161,21 @@ public class BinlogConnectorReplicator extends AbstractReplicator implements Rep
 				continue;
 			}
 
-			switch(event.getEvent().getHeader().getEventType()) {
+			EventType eventType = event.getEvent().getHeader().getEventType();
+			if (event.isCommitEvent()) {
+				if (!buffer.isEmpty()) {
+					buffer.getLast().setTXCommit();
+					long timeSpent = buffer.getLast().getTimestampMillis() - beginEvent.getEvent().getHeader().getTimestamp();
+					transactionExecutionTime.update(timeSpent);
+					transactionRowCount.update(buffer.size());
+				}
+				if(eventType == EventType.XID) {
+					buffer.setXid(event.xidData().getXid());
+				}
+				return buffer;
+			}
+
+			switch(eventType) {
 				case WRITE_ROWS:
 				case UPDATE_ROWS:
 				case DELETE_ROWS:
@@ -148,48 +183,45 @@ public class BinlogConnectorReplicator extends AbstractReplicator implements Rep
 				case EXT_UPDATE_ROWS:
 				case EXT_DELETE_ROWS:
 					Table table = tableCache.getTable(event.getTableID());
-					event.setLastHeartbeat(lastHeartbeatRead);
 
 					if ( table != null && shouldOutputEvent(table.getDatabase(), table.getName(), filter) ) {
-						for ( RowMap r : event.jsonMaps(table) )
-							buffer.add(r);
+						for ( RowMap r : event.jsonMaps(table, lastHeartbeatPosition, currentQuery) )
+							if (shouldOutputRowMap(table.getDatabase(), table.getName(), r, filter)) {
+								buffer.add(r);
+							}
 					}
-
+					currentQuery = null;
 					break;
 				case TABLE_MAP:
 					TableMapEventData data = event.tableMapData();
 					tableCache.processEvent(getSchema(), this.filter, data.getTableId(), data.getDatabase(), data.getTable());
 					break;
+				case ROWS_QUERY:
+					RowsQueryEventData rqed = event.getEvent().getData();
+					currentQuery = rqed.getQuery();
+					break;
 				case QUERY:
 					QueryEventData qe = event.queryData();
 					String sql = qe.getSql();
 
-					if ( sql.equals("COMMIT") ) {
-						// MyISAM will output a "COMMIT" QUERY_EVENT instead of a XID_EVENT.
-						// There's no transaction ID but we can still set "commit: true"
-						if ( !buffer.isEmpty() )
-							buffer.getLast().setTXCommit();
-
-						return buffer;
-					} else if ( sql.toUpperCase().startsWith("SAVEPOINT")) {
-						LOGGER.info("Ignoring SAVEPOINT in transaction: " + qe);
+					if ( sql.toUpperCase().startsWith(BinlogConnectorEvent.SAVEPOINT)) {
+						LOGGER.debug("Ignoring SAVEPOINT in transaction: " + qe);
 					} else if ( createTablePattern.matcher(sql).find() ) {
 						// CREATE TABLE `foo` SELECT * FROM `bar` will put a CREATE TABLE
 						// inside a transaction.  Note that this could, in rare cases, lead
 						// to us starting on a WRITE_ROWS event -- we sync the schema position somewhere
 						// kinda unsafe.
 						processQueryEvent(event);
+					} else if (sql.toUpperCase().startsWith("INSERT INTO MYSQL.RDS_HEARTBEAT")) {
+						// RDS heartbeat events take the following form:
+						// INSERT INTO mysql.rds_heartbeat2(id, value) values (1,1483041015005) ON DUPLICATE KEY UPDATE value = 1483041015005
+						// We don't need to process them, just ignore
+					} else if (sql.toUpperCase().startsWith("DROP TEMPORARY TABLE")) {
+						// Ignore temporary table drop statements inside transactions
 					} else {
 						LOGGER.warn("Unhandled QueryEvent inside transaction: " + qe);
 					}
 					break;
-				case XID:
-					buffer.setXid(event.xidData().getXid());
-
-					if ( !buffer.isEmpty() )
-						buffer.getLast().setTXCommit();
-
-					return buffer;
 			}
 		}
 	}
@@ -244,10 +276,11 @@ public class BinlogConnectorReplicator extends AbstractReplicator implements Rep
 				case EXT_UPDATE_ROWS:
 				case DELETE_ROWS:
 				case EXT_DELETE_ROWS:
-					LOGGER.warn("Started replication stream outside of transaction.  This shouldn't normally happen.");
+					LOGGER.warn("Started replication stream inside a transaction.  This shouldn't normally happen.");
+					LOGGER.warn("Assuming new transaction at unexpected event:" + event);
 
 					queue.offerFirst(event);
-					rowBuffer = getTransactionRows();
+					rowBuffer = getTransactionRows(event);
 					break;
 				case TABLE_MAP:
 					TableMapEventData data = event.tableMapData();
@@ -256,8 +289,8 @@ public class BinlogConnectorReplicator extends AbstractReplicator implements Rep
 				case QUERY:
 					QueryEventData qe = event.queryData();
 					String sql = qe.getSql();
-					if (sql.equals("BEGIN")) {
-						rowBuffer = getTransactionRows();
+					if (BinlogConnectorEvent.BEGIN.equals(sql)) {
+						rowBuffer = getTransactionRows(event);
 						rowBuffer.setServerId(event.getEvent().getHeader().getServerId());
 						rowBuffer.setThreadId(qe.getThreadId());
 					} else {
@@ -290,16 +323,12 @@ public class BinlogConnectorReplicator extends AbstractReplicator implements Rep
 			data.getDatabase(),
 			data.getSql(),
 			this.schemaStore,
-			event.getPosition(),
-			event.getEvent().getHeader().getTimestamp() / 1000
+			lastHeartbeatPosition.withBinlogPosition(event.getPosition()),
+			event.getEvent().getHeader().getTimestamp()
 		);
 	}
 
 	public Schema getSchema() throws SchemaStoreException {
 		return this.schemaStore.getSchema();
-	}
-
-	public void setFilter(MaxwellFilter filter) {
-		this.filter = filter;
 	}
 }

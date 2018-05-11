@@ -1,13 +1,227 @@
 # Maxwell changelog
 
+### [v1.14.2](https://github.com/zendesk/maxwell/releases/tag/v1.14.2): "bork bork bork"
+
+
+- fix regression in 1.14.1 around bootstrapping host detection
+- fix heartbeating code around table includes
+
+
+### [v1.14.1](https://github.com/zendesk/maxwell/releases/tag/v1.14.1): "half asleep in frog pajamas"
+
+
+- bootstraps can now take a client_id
+- improved config validation for embedded mode
+
+
+### [v1.14.0](https://github.com/zendesk/maxwell/releases/tag/v1.14.0): "cats, cats, more cats.  sadness at lack of cats."
+
+
+- new feature `--output_xoffset` to uniquely identify rows within transactions,
+  thx Jens Gyti
+- Bug fixes around "0000-00-00" times.
+- Bug fixes around dates pre 1000 AD
+
+
+### [v1.13.5](https://github.com/zendesk/maxwell/releases/tag/v1.13.5): "cyclone keni is real"
+
+- Support environment variable based configuration
+
+### [v1.13.4](https://github.com/zendesk/maxwell/releases/tag/v1.13.4): "it was just a dream"
+
+- Added possibility to do not declare the rabbitmq exchange.
+
+### [v1.13.3](https://github.com/zendesk/maxwell/releases/tag/v1.13.3): "winner winner chicken dinner"
+
+
+ - Add logging for binlog errors
+ - Maven warning fix
+ - Do not include current position DDL schema to avoid processing DDL twice
+ - Always write null fields in primary key fields
+ - Bugfix: fix http_path_prefix command line option issue
+
+### [v1.13.2](https://github.com/zendesk/maxwell/releases/tag/v1.13.2): "I just bought them to sleep in"
+
+
+- fix a bug with CHARACTER SET = DEFAULT
+- maxwell now eclipse-friendly.
+- configurable bind-address for maxwell's http server
+
+
+### [v1.13.1](https://github.com/zendesk/maxwell/releases/tag/v1.13.1): "line up your exes in song"
+
+
+- redis producer now supports LPUSH, thx @m-denton
+- RowMap can now contain artbitrary attributes for embedded maxwell, thx @jkgeyti
+- bugfix: fix jdbc option parsing when value contains `=`
+- bugfix: apparently the SQS producer was disabled
+- bugfix: fix a situation where adding a second client could cause
+  schemas to become out of sync
+- support for --daemon
+
+
+### [v1.13.0](https://github.com/zendesk/maxwell/releases/tag/v1.13.0): "sorry, I burned your clothes"
+
+
+- proper SSL connection support, thanks @cadams5
+- support for including original SQL in insert/update/deletes, thanks @saimon7
+- fixes for float4, float8 and other non-mysql datatypes
+- bump kinesis lib to 0.12.8
+- fix for bug when two databases share a single table
+
+
+### [v1.12.0](https://github.com/zendesk/maxwell/releases/tag/v1.12.0): "Cold Feet, literally and metaphorically."
+
+
+- Support for injecting a custom producer, thanks @tomcollinsproject
+- New producer for Amazon SQS, thanks @vikrant2mahajan
+- Maxwell can now filter rows based on column values, thanks @finnplay
+- Fixes for the Google Pubsub producer (it was really broken), thanks @finnplay
+- DDL output can now optionally include the source SQL, thanks @sungjuly
+- Support for double-quoted table/database/etc names
+- rabbitmq option for persistent messages, thanks @d-babiak
+- SQL parser bugfix for values like +1.234, thanks @hexene
+
+
+### [v1.11.0](https://github.com/zendesk/maxwell/releases/tag/v1.11.0): "the latest, the greatest"
+
+
+     - default kafka client upgrades to 0.11.0.1
+     - fix the encryption issue (https://github.com/zendesk/maxwell/issues/803)
+
+
+### [v1.10.9](https://github.com/zendesk/maxwell/releases/tag/v1.10.9): "no one left behind"
+
+We recommend all v1.10.7 and v1.10.8 users upgrade to v1.10.9.
+
+ - Add missing Kafka clients
+ - Listen and report on binlog connector lifecycle events for better visibility
+ - Reduce docker image size
+
+
+### [v1.10.8](https://github.com/zendesk/maxwell/releases/tag/v1.10.8): "what doesn't kill you makes you stronger"
+
+
+ - Fix docker builds
+ - Add Google Cloud Pub/Sub producer
+ - RabbitMQ producer enhancements
+
+
+### [v1.10.7](https://github.com/zendesk/maxwell/releases/tag/v1.10.7): "it's never too l8!"
+
+- Java 8 upgrade
+- Diagnostic health check endpoint
+- Encryption
+- Documentation update: encryption, kinesis producer, schema storage fundamentals, etc.
+
+### [v1.10.6](https://github.com/zendesk/maxwell/releases/tag/v1.10.6): "a new starter is here"
+
+
+ - Binlog-connector upgrade
+ - Bug-fix: when using literal string for an option that accepts Regex, Regex characters are no longer special
+ - If master recovery is enabled, Maxwell cleans up old positions for the same server and client id
+
+
+### [v1.10.5](https://github.com/zendesk/maxwell/releases/tag/v1.10.5): "half asleep on her couch"
+
+
+- Shyko's binlog-connector is now the default and only replication
+backend available for maxwell.
+
+
+### [v1.10.4](https://github.com/zendesk/maxwell/releases/tag/v1.10.4): "shutdown --harder"
+
+
+Notable changes:
+
+ - Shutdown hardening. If maxwell can't shut down (because the kafka
+   producer is in a bad state and `close()` never terminates, for example),
+   it would previously stall and process no messages. Now, shutdown is run
+   in a separate thread and there is an additional watchdog thread which
+   forcibly kills the maxwell process if it can't shut down within 10
+   seconds.
+ - Initial support for running maxwell from java, rather then as its own
+   process. This mode of operation is still experimental, but we'll
+   accept PRs to improve it (thanks Geoff Lywood).
+ - Fix incorrect handling of negative (pre-epoch dates) when using
+   binlog_connector mode (thanks Geoff Lywood).
+
+
+### [v1.10.3](https://github.com/zendesk/maxwell/releases/tag/v1.10.3): "1.10.2-and-a-bit"
+
+
+ - tiny release to fix a units error in the `replication.lag` metric
+   (subtracting seconds from milliseconds)
+
+
+### [v1.10.2](https://github.com/zendesk/maxwell/releases/tag/v1.10.2): "just in time for tomorrow"
+
+
+- added metrics: "replication.queue.time" and "inflightmessages.count"
+- renamed "time.overall" metric to "message.publish.time"
+- documentation updates (thanks Chintan Tank)
+
+
+### [v1.10.1](https://github.com/zendesk/maxwell/releases/tag/v1.10.1): "forgive and forget"
+
+The observable changes in this minor release are a new configuration for Kafka/Kinesis producer to abort processing on publish errors, and support of Kafka 0.10.2. Also a bunch of good refactoring has been done for heartbeat processing. List of changes:   
+
+- Support Kafka 0.10.2   
+- Stop procesing RDS hearbeats   
+- Keep maxwell heartbeat going every 10 seconds when database is quiet   
+- Allow for empty double-quoted string literals for database schema changes   
+- Ignore Kafka/Kinesis producer errors based on new configuration ignore_producer_error
+
+### [v1.10.0](https://github.com/zendesk/maxwell/releases/tag/v1.10.0): "slightly more ones than zeroes"
+
+This is a small release, primarily around a change to how schemas are
+stored. Maxwell now stores the `last_heartbeat_read` with each entry
+in the `schemas` table, making schema management more resilient to
+cases where binlog numbers are reused, but means that you must take
+care if you need to roll back to an earlier version. If you deploy
+v1.10.0, then roll back to an earlier version, you should manually
+update all `schemas`.`last_heartbeat_read` values to `0` before
+redeploying v1.10.0 or higher.
+
+Other minor changes:
+
+  - allow negative default numbers in columns
+  - only store final binlog position if it has changed
+  - blacklist internal aurora table `rds_heartbeat*'
+  - log4j version bump (allows for one entry per line JSON logging)
+
+
+### [v1.9.0](https://github.com/zendesk/maxwell/releases/tag/v1.9.0): "now with added whimsy"
+
+Maxwell 1.9 adds one main feature: monitoring support, contributed by
+Scott Ferguson. Multiple backends can be configured, read the updated
+docs for full details.
+
+There's also some bugfixes:
+
+- filter DDL messages based on config
+- determine newest schema from binlog order, not creation order
+- add task manager to shutdown cleanly on error
+- minor logging improvements
+
+
+### [v1.8.2](https://github.com/zendesk/maxwell/releases/tag/v1.8.2): "just as the postcards wept"
+
+
+Bugfix release.
+
+- maxwell would crash on a quoted partition name
+- fixes for alters on non-string tables containing VARCHAR
+- use seconds instead of milliseconds for DDL messages
+
+
 ### [v1.8.1](https://github.com/zendesk/maxwell/releases/tag/v1.8.1): "famous is faster, don't have to be talented"
 
 
 - performance improves in capturing and restoring schema, thx Joren
-Minnaert
+  Minnaert
 - Allow for capturing from a separate mysql host (adds support for using
-Maxscale as a replication proxy), thx Adam Szkoda
-
+  Maxscale as a replication proxy), thx Adam Szkoda
 
 ### [v1.8.0](https://github.com/zendesk/maxwell/releases/tag/v1.8.0): "upbeat, honest, contradictory"
 
@@ -15,20 +229,17 @@ Maxscale as a replication proxy), thx Adam Szkoda
 In version 1.8.0 Maxwell gains alpha support for GTID-based positions!
 All praise due to Henry Cai.
 
-
 ### [v1.7.2](https://github.com/zendesk/maxwell/releases/tag/v1.7.2): "comparing self to better"
 
 
 - Fix a bug found where maxwell could cache the wrong TABLE_MAP_ID for a
-binlog event, leading to crashes or in some cases data mismatches.
-
+  binlog event, leading to crashes or in some cases data mismatches.
 
 ### [v1.7.1](https://github.com/zendesk/maxwell/releases/tag/v1.7.1): "blame it on your seratonin"
 
 
 - bootstrapping now can take a `--where` clause
 - performance improvements in the kafka producer
-
 
 ### [v1.7.0](https://github.com/zendesk/maxwell/releases/tag/v1.7.0): "lucky me, lucky mud"
 

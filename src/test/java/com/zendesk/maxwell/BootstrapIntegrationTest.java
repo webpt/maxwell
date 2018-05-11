@@ -1,19 +1,16 @@
 package com.zendesk.maxwell;
 
-import com.zendesk.maxwell.row.RowEncrypt;
-import com.zendesk.maxwell.row.RowMap;
+import com.zendesk.maxwell.producer.EncryptionMode;
 import com.zendesk.maxwell.producer.MaxwellOutputConfig;
-import javax.crypto.Cipher;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
-import org.apache.commons.codec.binary.Base64;
+import com.zendesk.maxwell.row.RowMap;
 import org.junit.Test;
 
-import java.nio.charset.Charset;
 import java.sql.Timestamp;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
-import static org.hamcrest.CoreMatchers.*;
+import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
 
 public class BootstrapIntegrationTest extends MaxwellTestWithIsolatedServer {
@@ -122,10 +119,10 @@ public class BootstrapIntegrationTest extends MaxwellTestWithIsolatedServer {
 		testColumnType("date", "'2015-11-07'","2015-11-07");
 		testColumnType("datetime", "'2015-11-07 01:02:03'","2015-11-07 01:02:03");
 
-		if ( !server.getVersion().equals("5.7") ) {
-			testColumnType("date", "'0000-00-00'",null);
-			testColumnType("datetime", "'0000-00-00 00:00:00'", null);
-			testColumnType("timestamp", "'0000-00-00 00:00:00'","" + epoch.substring(0, epoch.length() - 2) + "", null);
+		if (server.supportsZeroDates()) {
+			testColumnType("date", "'0000-00-00'", "0000-00-00");
+			testColumnType("datetime", "'0000-00-00 00:00:00'", "0000-00-00 00:00:00");
+			testColumnType("timestamp", "'0000-00-00 00:00:00'", "0000-00-00 00:00:00");
 		}
 
 		testColumnType("datetime", "'1000-01-01 00:00:00'","1000-01-01 00:00:00");
@@ -139,24 +136,23 @@ public class BootstrapIntegrationTest extends MaxwellTestWithIsolatedServer {
 
 	@Test
 	public void testSubsecondTypes() throws Exception {
-		if ( server.getVersion().equals("5.6") ) {
-			testColumnType("timestamp(6)", "'2015-11-07 01:02:03.333444'","2015-11-07 01:02:03.333444");
-			testColumnType("timestamp(6)", "'2015-11-07 01:02:03.123'","2015-11-07 01:02:03.123000");
-			testColumnType("timestamp(6)", "'2015-11-07 01:02:03.0'","2015-11-07 01:02:03.000000");
+		requireMinimumVersion(server.VERSION_5_6);
+		testColumnType("timestamp(6)", "'2015-11-07 01:02:03.333444'","2015-11-07 01:02:03.333444");
+		testColumnType("timestamp(6)", "'2015-11-07 01:02:03.123'","2015-11-07 01:02:03.123000");
+		testColumnType("timestamp(6)", "'2015-11-07 01:02:03.0'","2015-11-07 01:02:03.000000");
 
-			testColumnType("timestamp(3)", "'2015-11-07 01:02:03.123456'","2015-11-07 01:02:03.123");
-			testColumnType("timestamp(3)", "'2015-11-07 01:02:03.123'","2015-11-07 01:02:03.123");
-			testColumnType("timestamp(3)", "'2015-11-07 01:02:03.1'","2015-11-07 01:02:03.100");
-			testColumnType("timestamp(3)", "'2015-11-07 01:02:03.0'","2015-11-07 01:02:03.000");
+		testColumnType("timestamp(3)", "'2015-11-07 01:02:03.123456'","2015-11-07 01:02:03.123");
+		testColumnType("timestamp(3)", "'2015-11-07 01:02:03.123'","2015-11-07 01:02:03.123");
+		testColumnType("timestamp(3)", "'2015-11-07 01:02:03.1'","2015-11-07 01:02:03.100");
+		testColumnType("timestamp(3)", "'2015-11-07 01:02:03.0'","2015-11-07 01:02:03.000");
 
-			testColumnType("datetime(6)", "'2015-11-07 01:02:03.123456'","2015-11-07 01:02:03.123456");
-			testColumnType("datetime(6)", "'2015-11-07 01:02:03.123'","2015-11-07 01:02:03.123000");
-			testColumnType("datetime(3)", "'2015-11-07 01:02:03.123456'","2015-11-07 01:02:03.123");
-			testColumnType("datetime(3)", "'2015-11-07 01:02:03.123'","2015-11-07 01:02:03.123");
-			testColumnType("time(3)", "'01:02:03.123456'","01:02:03.123");
-			testColumnType("time(6)", "'01:02:03.123456'","01:02:03.123456");
-			testColumnType("time(3)", "'01:02:03.123'","01:02:03.123");
-		}
+		testColumnType("datetime(6)", "'2015-11-07 01:02:03.123456'","2015-11-07 01:02:03.123456");
+		testColumnType("datetime(6)", "'2015-11-07 01:02:03.123'","2015-11-07 01:02:03.123000");
+		testColumnType("datetime(3)", "'2015-11-07 01:02:03.123456'","2015-11-07 01:02:03.123");
+		testColumnType("datetime(3)", "'2015-11-07 01:02:03.123'","2015-11-07 01:02:03.123");
+		testColumnType("time(3)", "'01:02:03.123456'","01:02:03.123");
+		testColumnType("time(6)", "'01:02:03.123456'","01:02:03.123456");
+		testColumnType("time(3)", "'01:02:03.123'","01:02:03.123");
 	}
 
 	@Test
@@ -190,8 +186,6 @@ public class BootstrapIntegrationTest extends MaxwellTestWithIsolatedServer {
 
 	private void testColumnType(String sqlType, String sqlValue, Object expectedJsonValue) throws Exception {
 		testColumnType(sqlType, sqlValue, expectedJsonValue, expectedJsonValue);
-		testEncryptedColumnType(sqlType, sqlValue, expectedJsonValue, expectedJsonValue);
-		testEncryptedAllColumnType(sqlType, sqlValue, expectedJsonValue, expectedJsonValue);
 	}
 
 	private void testColumnType(String sqlType, String sqlValue, Object expectedNormalJsonValue, Object expectedBootstrappedJsonValue) throws Exception {
@@ -203,90 +197,33 @@ public class BootstrapIntegrationTest extends MaxwellTestWithIsolatedServer {
 		};
 
 		List<RowMap> rows = getRowsForSQL(input);
+		testColumnTypeSerialization(EncryptionMode.ENCRYPT_NONE, rows, expectedNormalJsonValue, expectedBootstrappedJsonValue);
+		testColumnTypeSerialization(EncryptionMode.ENCRYPT_DATA, rows, expectedNormalJsonValue, expectedBootstrappedJsonValue);
+		testColumnTypeSerialization(EncryptionMode.ENCRYPT_ALL, rows, expectedNormalJsonValue, expectedBootstrappedJsonValue);
+	}
+
+	private void testColumnTypeSerialization(EncryptionMode encryptionMode, List<RowMap> rows, Object expectedNormalJsonValue, Object expectedBootstrappedJsonValue) throws Exception {
 		boolean foundNormalRow = false;
+		MaxwellOutputConfig outputConfig = new MaxwellOutputConfig();
+		outputConfig.encryptionMode = encryptionMode;
+		outputConfig.secret_key = "aaaaaaaaaaaaaaaa";
 
 		for ( RowMap r : rows ) {
-			String json = r.toJSON();
+			Map<String, Object> output = MaxwellTestJSON.parseJSON(r.toJSON(outputConfig));
+			Map<String, Object> decrypted = MaxwellTestJSON.parseEncryptedJSON(output, outputConfig.secret_key);
 
-			Map<String, Object> data, output = MaxwellTestJSON.parseJSON(r.toJSON());
+			if (encryptionMode == EncryptionMode.ENCRYPT_ALL) {
+				output = decrypted;
+			}
+
 			if ( output.get("table").equals("column_test") && output.get("type").equals("insert") ) {
-				data = (Map<String, Object>) output.get("data");
+				Map<String, Object> dataSource = encryptionMode == EncryptionMode.ENCRYPT_DATA ? decrypted : output;
+				Map<String, Object> data = (Map<String, Object>) dataSource.get("data");
 				if ( !foundNormalRow ) {
 					foundNormalRow = true;
 					assertThat(data.get("col"), is(expectedNormalJsonValue));
 				} else {
 					assertThat(data.get("col"), is(expectedBootstrappedJsonValue));
-				}
-			}
-		}
-	}
-
-	private void testEncryptedColumnType(String sqlType, String sqlValue, Object expectedNormalJsonValue, Object expectedBootstrappedJsonValue) throws Exception {
-		MaxwellOutputConfig outputConfig = new MaxwellOutputConfig();
-		outputConfig.encryptData = true;
-		outputConfig.encryption_key = "aaaaaaaaaaaaaaaa";
-		outputConfig.secret_key = "RandomInitVector";
-
-		String input[] = {
-				"DROP TABLE IF EXISTS shard_1.column_test",
-				String.format("CREATE TABLE IF NOT EXISTS shard_1.column_test (id int unsigned auto_increment NOT NULL primary key, col %s)", sqlType),
-				String.format("INSERT INTO shard_1.column_test SET col = %s", sqlValue),
-				"INSERT INTO maxwell.bootstrap set database_name = 'shard_1', table_name = 'column_test'"
-		};
-
-		List<RowMap> rows = getRowsForSQL(input);
-		boolean foundNormalRow = false;
-
-		for ( RowMap r : rows ) {
-			String json = r.toJSON(outputConfig);
-
-			Map<String, Object> data, output = MaxwellTestJSON.parseJSON(r.toJSON(outputConfig));
-			if ( output.get("table").equals("column_test") && output.get("type").equals("insert") ) {
-				IvParameterSpec ivSpec = new IvParameterSpec(outputConfig.secret_key.getBytes("UTF-8"));
-				SecretKeySpec skeySpec = new SecretKeySpec(outputConfig.encryption_key.getBytes("UTF-8"), "AES");
-				Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5PADDING");
-				cipher.init(Cipher.DECRYPT_MODE, skeySpec, ivSpec);
-
-				output.put("data",MaxwellTestJSON.parseJSON(new String(cipher.doFinal(Base64.decodeBase64(output.get("data").toString().getBytes())), Charset.forName("UTF-8"))));
-
-				data = (Map<String, Object>) output.get("data");
-				if ( !foundNormalRow ) {
-					foundNormalRow = true;
-					assertThat(data.get("col"), is(expectedNormalJsonValue));
-				} else {
-					assertThat(data.get("col"), is(expectedBootstrappedJsonValue));
-				}
-			}
-		}
-	}
-
-	private void testEncryptedAllColumnType(String sqlType, String sqlValue, Object expectedNormalJsonValue, Object expectedBootstrappedJsonValue) throws Exception {
-		MaxwellOutputConfig outputConfig = new MaxwellOutputConfig();
-		outputConfig.encryptAll = true;
-		outputConfig.encryption_key = "aaaaaaaaaaaaaaaa";
-		outputConfig.secret_key = "RandomInitVector";
-
-		String input[] = {
-				"DROP TABLE IF EXISTS shard_1.column_test",
-				String.format("CREATE TABLE IF NOT EXISTS shard_1.column_test (id int unsigned auto_increment NOT NULL primary key, col %s)", sqlType),
-				String.format("INSERT INTO shard_1.column_test SET col = %s", sqlValue),
-				"INSERT INTO maxwell.bootstrap set database_name = 'shard_1', table_name = 'column_test'"
-		};
-
-		List<RowMap> rows = getRowsForSQL(input);
-		boolean foundNormalRow = false;
-
-		for ( RowMap r : rows ) {
-			String json = r.toJSON(outputConfig);
-
-			Map<String,Object> output = MaxwellTestJSON.parseJSON(RowEncrypt.decrypt(json, outputConfig.encryption_key, outputConfig.secret_key));
-			if ( output.get("table").equals("column_test") && output.get("type").equals("insert") ) {
-				output = (Map<String, Object>) output.get("data");
-				if ( !foundNormalRow ) {
-					foundNormalRow = true;
-					assertThat(output.get("col"), is(expectedNormalJsonValue));
-				} else {
-					assertThat(output.get("col"), is(expectedBootstrappedJsonValue));
 				}
 			}
 		}

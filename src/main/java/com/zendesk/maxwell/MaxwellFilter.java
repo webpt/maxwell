@@ -1,10 +1,9 @@
 package com.zendesk.maxwell;
 
+import org.apache.commons.lang.StringUtils;
+
 import java.util.*;
 import java.util.regex.Pattern;
-
-import com.google.code.or.common.glossary.Column;
-import com.google.code.or.common.glossary.Row;
 
 /*
 	filters compile down to:
@@ -18,21 +17,44 @@ public class MaxwellFilter {
 	private final ArrayList<Pattern> excludeTables = new ArrayList<>();
 	private final ArrayList<Pattern> blacklistDatabases = new ArrayList<>();
 	private final ArrayList<Pattern> blacklistTables = new ArrayList<>();
+	private final Map<String, String> includeColumnValues = new HashMap<>();
 
 	public MaxwellFilter() { }
-	public MaxwellFilter(String includeDatabases,
-						 String excludeDatabases,
-						 String includeTables,
-						 String excludeTables,
-						 String blacklistDatabases,
-						 String blacklistTables) throws MaxwellInvalidFilterException {
+
+	public MaxwellFilter(
+		String includeDatabases,
+		String excludeDatabases,
+		String includeTables,
+		String excludeTables,
+		String blacklistDatabases,
+		String blacklistTables,
+		String includeColumnValues
+	) throws MaxwellInvalidFilterException {
+		this(includeDatabases, excludeDatabases, includeTables, excludeTables, blacklistDatabases, blacklistTables);
+
+		if (includeColumnValues != null && !"".equals(includeColumnValues)) {
+			for (String s : includeColumnValues.split(",")) {
+				String[] columnAndValue = s.split("=");
+				includeColumnValue(columnAndValue[0], columnAndValue[1]);
+			}
+		}
+	}
+
+	public MaxwellFilter(
+		String includeDatabases,
+		String excludeDatabases,
+		String includeTables,
+		String excludeTables,
+		String blacklistDatabases,
+		String blacklistTables
+	) throws MaxwellInvalidFilterException {
 		if ( includeDatabases != null ) {
-			for (String s : includeDatabases.split(","))
+			for ( String s : includeDatabases.split(",") )
 				includeDatabase(s);
 		}
 
 		if ( excludeDatabases != null ) {
-			for (String s : excludeDatabases.split(","))
+			for ( String s : excludeDatabases.split(",") )
 				excludeDatabase(s);
 		}
 
@@ -42,7 +64,7 @@ public class MaxwellFilter {
 		}
 
 		if ( excludeTables != null ) {
-			for (String s : excludeTables.split(","))
+			for ( String s : excludeTables.split(",") )
 				excludeTable(s);
 		}
 
@@ -79,6 +101,10 @@ public class MaxwellFilter {
 
 	public void blacklistTable(String name) throws MaxwellInvalidFilterException {
 		blacklistTables.add(compile(name));
+	}
+
+	public void includeColumnValue(String column, String value) throws MaxwellInvalidFilterException {
+		includeColumnValues.put(column, value);
 	}
 
 	public boolean isDatabaseWhitelist() {
@@ -123,7 +149,34 @@ public class MaxwellFilter {
 	}
 
 	public boolean matches(String database, String table) {
+		if (table == null) {
+			return matchesDatabase(database);
+		}
 		return matchesDatabase(database) && matchesTable(table);
+	}
+
+	private boolean matchesValues(Map<String, Object> data) {
+		for (Map.Entry<String, String> entry : includeColumnValues.entrySet()) {
+			String column = entry.getKey();
+
+			if (data.containsKey(column)) {
+				String expectedColumnValue = entry.getValue();
+				Object value = data.get(column);
+
+				if ("NULL".equals(expectedColumnValue)) {
+					// null or "null" (string) or "NULL" (string) is expected
+					if (value != null && !"null".equals(value) && !"NULL".equals(value)) {
+						return false;
+					}
+				} else {
+					if (value == null || !expectedColumnValue.equals(value.toString())) {
+						return false;
+					}
+				}
+			}
+		}
+
+		return true;
 	}
 
 	public boolean isDatabaseBlacklisted(String databaseName) {
@@ -132,11 +185,28 @@ public class MaxwellFilter {
 
 	public boolean isTableBlacklisted(String databaseName, String tableName) {
 		return isSystemBlacklisted(databaseName, tableName)
-			   || isDatabaseBlacklisted(databaseName)
-			   || !filterListsInclude(emptyList, blacklistTables, tableName);
+			|| isDatabaseBlacklisted(databaseName)
+			|| !filterListsInclude(emptyList, blacklistTables, tableName);
 	}
 
 	public static boolean isSystemBlacklisted(String databaseName, String tableName) {
-		return "mysql".equals(databaseName) && "ha_health_check".equals(tableName);
+		return "mysql".equals(databaseName) &&
+			("ha_health_check".equals(tableName) || StringUtils.startsWith(tableName, "rds_heartbeat"));
+	}
+
+	public static boolean matches(MaxwellFilter filter, String database, String table) {
+		if (filter == null) {
+			return true;
+		} else {
+			return filter.matches(database, table);
+		}
+	}
+
+	public static boolean matchesValues(MaxwellFilter filter, String database, String table, Map<String, Object> data) {
+		if (filter == null) {
+			return true;
+		} else {
+			return filter.matchesValues(data);
+		}
 	}
 }

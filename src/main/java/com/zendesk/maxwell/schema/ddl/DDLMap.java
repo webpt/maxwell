@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zendesk.maxwell.producer.MaxwellOutputConfig;
 import com.zendesk.maxwell.replication.BinlogPosition;
+import com.zendesk.maxwell.replication.Position;
 import com.zendesk.maxwell.row.RowMap;
 
 import java.io.IOException;
@@ -15,10 +16,10 @@ public class DDLMap extends RowMap {
 	private final ResolvedSchemaChange change;
 	private final Long timestamp;
 	private final String sql;
-	private BinlogPosition nextPosition;
+	private Position nextPosition;
 
-	public DDLMap(ResolvedSchemaChange change, Long timestamp, String sql, BinlogPosition nextPosition) {
-		super("ddl", "database", "table", timestamp, new ArrayList<String>(0), nextPosition);
+	public DDLMap(ResolvedSchemaChange change, Long timestamp, String sql, Position nextPosition) {
+		super("ddl", change.databaseName(), change.tableName(), timestamp, new ArrayList<>(0), nextPosition);
 		this.change = change;
 		this.timestamp = timestamp;
 		this.sql = sql;
@@ -48,11 +49,12 @@ public class DDLMap extends RowMap {
 		Map<String, Object> changeMixin = mapper.convertValue(change, new TypeReference<Map<String, Object>>() { });
 		changeMixin.put("ts", timestamp);
 		changeMixin.put("sql", sql);
+		BinlogPosition binlogPosition = nextPosition.getBinlogPosition();
 		if ( outputConfig.includesBinlogPosition ) {
-			changeMixin.put("position", this.nextPosition.getFile() + ":" + this.nextPosition.getOffset());
+			changeMixin.put("position", binlogPosition.getFile() + ":" + binlogPosition.getOffset());
 		}
 		if ( outputConfig.includesGtidPosition) {
-			changeMixin.put("gtid", this.nextPosition.getGtid());
+			changeMixin.put("gtid", binlogPosition.getGtid());
 		}
 		return mapper.writeValueAsString(changeMixin);
 	}
@@ -60,5 +62,9 @@ public class DDLMap extends RowMap {
 	@Override
 	public boolean shouldOutput(MaxwellOutputConfig outputConfig) {
 		return outputConfig.outputDDL;
+	}
+
+	public String getSql() {
+		return sql;
 	}
 }
