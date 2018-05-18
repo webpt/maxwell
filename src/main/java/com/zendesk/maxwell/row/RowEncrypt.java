@@ -13,8 +13,8 @@ public class RowEncrypt {
 	private final static String TEXT_ENCODING = "UTF-8";
 	private final static String BYTE_ENCODING = "ASCII";
 
-	public static String encrypt(String value, String secretKey, byte[] initVector) throws Exception {
-		IvParameterSpec ivSpec = new IvParameterSpec(initVector);
+	public static String encrypt(String value, String secretKey, String initVector) throws Exception {
+		IvParameterSpec ivSpec = new IvParameterSpec(initVector.getBytes());
 		Cipher cipher = getCipher();
 		cipher.init(Cipher.ENCRYPT_MODE, loadKey(secretKey), ivSpec);
 
@@ -23,7 +23,9 @@ public class RowEncrypt {
 	}
 
 	public static String decrypt(String value, String secretKey, String initVector) throws Exception {
-		IvParameterSpec ivSpec = new IvParameterSpec(base64Decode(initVector));
+		byte[] test = base64Decode(initVector);
+		String testString = new String(test, "UTF-8");
+		IvParameterSpec ivSpec = new IvParameterSpec(initVector.getBytes());
 		Cipher cipher = getCipher();
 		cipher.init(Cipher.DECRYPT_MODE, loadKey(secretKey), ivSpec);
 

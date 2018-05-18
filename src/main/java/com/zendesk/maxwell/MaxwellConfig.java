@@ -215,7 +215,7 @@ public class MaxwellConfig extends AbstractConfig {
 		parser.accepts( "output_ddl", "produce DDL records to ddl_kafka_topic [true|false]. default: false" ).withOptionalArg();
 
 		parser.accepts( "ddl_kafka_topic", "optionally provide an alternate topic to push DDL records to. default: kafka_topic").withOptionalArg();
-		parser.accepts("encryption_key", "The 128 bit key used for encryption").withOptionalArg();
+		parser.accepts("init_vector", "The 128 bit key used for encryption").withOptionalArg();
 		parser.accepts("secret_key", "The secret key for the AES encryption").withOptionalArg();
 		parser.accepts("trim_string", "Integer to trim string to this size").withOptionalArg();
 		parser.accepts("remove_nonascii", "boolean flag to enable removal of all non-ascii characters").withOptionalArg();
@@ -524,7 +524,7 @@ public class MaxwellConfig extends AbstractConfig {
 
 		if (outputConfig.encryptionEnabled()) {
 			outputConfig.secret_key = fetchOption("secret_key", options, properties, null);
-			outputConfig.encryption_key = fetchOption("encryption_key", options, properties, null);
+			outputConfig.init_vector = fetchOption("init_vector", options, properties, null);
 		}
 	}
 

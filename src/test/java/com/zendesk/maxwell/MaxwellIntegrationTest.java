@@ -35,13 +35,14 @@ public class MaxwellIntegrationTest extends MaxwellTestWithIsolatedServer {
 		MaxwellOutputConfig outputConfig = new MaxwellOutputConfig();
 		outputConfig.encryptionMode = EncryptionMode.ENCRYPT_DATA;
 		outputConfig.secret_key = "aaaaaaaaaaaaaaaa";
+		outputConfig.init_vector = "RandomInitVector";
 		List<RowMap> list;
 		String input[] = {"insert into minimal set account_id =1, text_field='hello'"};
 		list = getRowsForSQL(input);
 		String json = list.get(0).toJSON(outputConfig);
 
 		Map<String,Object> output = MaxwellTestJSON.parseJSON(json);
-		Map<String, Object> decrypted = MaxwellTestJSON.parseEncryptedJSON(output, outputConfig.secret_key);
+		Map<String, Object> decrypted = MaxwellTestJSON.parseEncryptedJSON(output, outputConfig.secret_key, outputConfig.init_vector);
 
 		assertTrue(output.get("database").equals("shard_1"));
 		assertTrue(output.get("table").equals("minimal"));
@@ -58,15 +59,16 @@ public class MaxwellIntegrationTest extends MaxwellTestWithIsolatedServer {
 		MaxwellOutputConfig outputConfig = new MaxwellOutputConfig();
 		outputConfig.encryptionMode = EncryptionMode.ENCRYPT_ALL;
 		outputConfig.secret_key = "aaaaaaaaaaaaaaaa";
+		outputConfig.init_vector = "RandomInitVector";
 		List<RowMap> list;
 		String input[] = {"insert into minimal set account_id =1, text_field='hello'"};
 		list = getRowsForSQL(input);
 		String json = list.get(0).toJSON(outputConfig);
 
 		Map<String,Object> output = MaxwellTestJSON.parseJSON(json);
-		Map<String, Object> decrypted = MaxwellTestJSON.parseEncryptedJSON(output, outputConfig.secret_key);
+		Map<String, Object> decrypted = MaxwellTestJSON.parseEncryptedJSON(output, outputConfig.secret_key, outputConfig.init_vector);
 
-		assertArrayEquals(output.keySet().toArray(), new String[]{ "encrypted" });
+		assertArrayEquals(output.keySet().toArray(), new String[]{ "data" });
 
 		assertTrue(decrypted.get("database").equals("shard_1"));
 		assertTrue(decrypted.get("table").equals("minimal"));

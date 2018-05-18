@@ -17,7 +17,7 @@ public class MaxwellOutputConfig {
 	public boolean outputDDL;
 	public List<Pattern> excludeColumns;
 
-	public String encryption_key;
+	public String init_vector;
 	public String secret_key;
 	public Integer trimString;
 	public boolean removeNonAscii;
@@ -33,7 +33,7 @@ public class MaxwellOutputConfig {
 		this.includesRowQuery = false;
 		this.outputDDL = false;
 		this.excludeColumns = new ArrayList<>();
-		this.encryption_key = null;
+		this.init_vector = null;
 		this.secret_key = null;
 		this.removeNonAscii = false;
 		this.trimString = 0;

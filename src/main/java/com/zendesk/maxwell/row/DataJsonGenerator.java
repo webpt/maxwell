@@ -84,9 +84,11 @@ class EncryptingJsonGenerator implements DataJsonGenerator {
 
 	private  void writeEncryptedField(String rawJson, EncryptionContext ctx) throws Exception {
 		String encryptedJSON = RowEncrypt.encrypt(rawJson, ctx.secretKey, ctx.iv);
-		rawGenerator.writeObjectFieldStart("encrypted");
+		rawGenerator.writeStringField("data", encryptedJSON);
+		/*rawGenerator.writeObjectFieldStart("encrypted");
 		rawGenerator.writeStringField("iv", Base64.encodeBase64String(ctx.iv));
 		rawGenerator.writeStringField("bytes", encryptedJSON);
 		rawGenerator.writeEndObject();
+		*/
 	}
 }

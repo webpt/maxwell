@@ -26,13 +26,13 @@ public class MaxwellTestJSON {
 		return mapper.readValue(json, MAP_STRING_OBJECT_REF);
 	}
 
-	public static Map<String, Object> parseEncryptedJSON(Map<String,Object> json, String secretKey) throws Exception {
-		Map<String, String> encrypted = (Map)json.get("encrypted");
-		if (encrypted == null) {
+	public static Map<String, Object> parseEncryptedJSON(Map<String,Object> json, String secretKey, String initVector) throws Exception {
+		Object encrypted = json.get("data");
+		if (!(encrypted instanceof String)) {
 			return null;
 		}
-		String init_vector = encrypted.get("iv");
-		String plaintext = RowEncrypt.decrypt(encrypted.get("bytes").toString(), secretKey, init_vector);
+
+		String plaintext = RowEncrypt.decrypt((String) encrypted, secretKey, initVector);
 		return parseJSON(plaintext);
 	}
 

@@ -66,7 +66,7 @@ public class RowMapDeserializerTest {
 		byte[] bytes = ByteStreams.toByteArray(this.getClass().getResourceAsStream("/json/encrypted-user-insert.json"));
 		Assert.assertNotNull(bytes);
 
-		RowMap rowMap = RowMapDeserializer.createFromString(new String(bytes),"aaaaaaaaaaaaaaaa");
+		RowMap rowMap = RowMapDeserializer.createFromString(new String(bytes),"aaaaaaaaaaaaaaaa", "RandomInitVector");
 		Assert.assertNotNull(rowMap);
 
 		Assert.assertEquals("shard_1", rowMap.getDatabase());
@@ -84,9 +84,8 @@ public class RowMapDeserializerTest {
 		byte[] bytes = ByteStreams.toByteArray(this.getClass().getResourceAsStream("/json/encrypted-user-update.json"));
 		Assert.assertNotNull(bytes);
 
-		RowMap rowMap = RowMapDeserializer.createFromString(new String(bytes),"aaaaaaaaaaaaaaaa");
+		RowMap rowMap = RowMapDeserializer.createFromString(new String(bytes),"aaaaaaaaaaaaaaaa", "RandomInitVector");
 		Assert.assertNotNull(rowMap);
-
 		Assert.assertEquals("shard_1", rowMap.getDatabase());
 		Assert.assertEquals("minimal", rowMap.getTable());
 		Assert.assertEquals("update", rowMap.getRowType());
@@ -102,7 +101,7 @@ public class RowMapDeserializerTest {
 		byte[] bytes = ByteStreams.toByteArray(this.getClass().getResourceAsStream("/json/all-encrypted-user-insert.json"));
 		Assert.assertNotNull(bytes);
 
-		RowMap rowMap = RowMapDeserializer.createFromString(new String(bytes),"aaaaaaaaaaaaaaaa");
+		RowMap rowMap = RowMapDeserializer.createFromString(new String(bytes),"aaaaaaaaaaaaaaaa", "RandomInitVector");
 		Assert.assertNotNull(rowMap);
 
 		Assert.assertEquals("shard_1", rowMap.getDatabase());
@@ -120,7 +119,7 @@ public class RowMapDeserializerTest {
 		byte[] bytes = ByteStreams.toByteArray(this.getClass().getResourceAsStream("/json/all-encrypted-user-update.json"));
 		Assert.assertNotNull(bytes);
 
-		RowMap rowMap = RowMapDeserializer.createFromString(new String(bytes),"aaaaaaaaaaaaaaaa");
+		RowMap rowMap = RowMapDeserializer.createFromString(new String(bytes),"aaaaaaaaaaaaaaaa", "RandomInitVector");
 		Assert.assertNotNull(rowMap);
 
 		Assert.assertEquals("shard_1", rowMap.getDatabase());

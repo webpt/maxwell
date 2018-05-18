@@ -17,14 +17,15 @@ import java.util.Iterator;
 public class RowMapDeserializer extends StdDeserializer<RowMap> {
 	private static ObjectMapper mapper;
 	private String secret_key;
+	private String iv;
 
 
 	public RowMapDeserializer() {
 		this(Class.class);
 	}
 
-	public RowMapDeserializer(String secret_key){
-		this(null,secret_key);
+	public RowMapDeserializer(String secret_key, String iv){
+		this(null,secret_key, iv);
 	}
 
 
@@ -32,30 +33,33 @@ public class RowMapDeserializer extends StdDeserializer<RowMap> {
 		super(vc);
 	}
 
-	public RowMapDeserializer(Class<?> vc, String secret_key){
+	public RowMapDeserializer(Class<?> vc, String secret_key, String iv){
 		super(vc);
 		this.secret_key = secret_key;
+		this.iv = iv;
 	}
 
 	@Override
 	public RowMap deserialize(JsonParser jsonParser, DeserializationContext deserializationContext) throws IOException {
 		ObjectNode node = jsonParser.getCodec().readTree(jsonParser);
+		Iterator it = node.fieldNames();
 
-		JsonNode encrypted = node.get("encrypted");
+		String encrypted = node.get("data").textValue();
 		if (encrypted != null) {
-			String iv = encrypted.get("iv").textValue();
-			String bytes = encrypted.get("bytes").textValue();
+			//String bytes = encrypted.get("bytes").textValue();
 
 			String decryptedData;
 			try {
-				decryptedData = RowEncrypt.decrypt(bytes, this.secret_key, iv);
+				decryptedData = RowEncrypt.decrypt(encrypted, this.secret_key, this.iv);
 			} catch (Exception e) {
 				throw new IOException(e);
 			}
 			JsonNode decrypted = mapper.readTree(decryptedData);
+
 			if (!(decrypted instanceof ObjectNode)) {
 				throw new ParseException("`encrypted` must be an object after decrypting.");
 			}
+
 			node.setAll((ObjectNode) decrypted);
 		}
 
@@ -168,12 +172,12 @@ public class RowMapDeserializer extends StdDeserializer<RowMap> {
 		return value.asText();
 	}
 
-	private static ObjectMapper getMapper(String secret_key)
+	private static ObjectMapper getMapper(String secret_key, String iv)
 	{
 		if (mapper == null) {
 			mapper = new ObjectMapper();
 			SimpleModule module = new SimpleModule();
-			module.addDeserializer(RowMap.class, new RowMapDeserializer(secret_key));
+			module.addDeserializer(RowMap.class, new RowMapDeserializer(secret_key, iv));
 			mapper.registerModule(module);
 		}
 
@@ -198,9 +202,9 @@ public class RowMapDeserializer extends StdDeserializer<RowMap> {
 		return getMapper().readValue(json, RowMap.class);
 	}
 
-	public static RowMap createFromString(String json, String secret_key) throws IOException
+	public static RowMap createFromString(String json, String secret_key, String iv) throws IOException
 	{
-		return getMapper(secret_key).readValue(json, RowMap.class);
+		return getMapper(secret_key, iv).readValue(json, RowMap.class);
 	}
 
 	public static void resetMapper(){

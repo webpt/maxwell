@@ -207,10 +207,11 @@ public class BootstrapIntegrationTest extends MaxwellTestWithIsolatedServer {
 		MaxwellOutputConfig outputConfig = new MaxwellOutputConfig();
 		outputConfig.encryptionMode = encryptionMode;
 		outputConfig.secret_key = "aaaaaaaaaaaaaaaa";
+		outputConfig.init_vector = "RandomInitVector";
 
 		for ( RowMap r : rows ) {
 			Map<String, Object> output = MaxwellTestJSON.parseJSON(r.toJSON(outputConfig));
-			Map<String, Object> decrypted = MaxwellTestJSON.parseEncryptedJSON(output, outputConfig.secret_key);
+			Map<String, Object> decrypted = MaxwellTestJSON.parseEncryptedJSON(output, outputConfig.secret_key, outputConfig.init_vector);
 
 			if (encryptionMode == EncryptionMode.ENCRYPT_ALL) {
 				output = decrypted;

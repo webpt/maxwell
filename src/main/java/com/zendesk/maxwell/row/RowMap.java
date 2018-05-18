@@ -362,7 +362,7 @@ public class RowMap implements Serializable {
 
 		EncryptionContext encryptionContext = null;
 		if (outputConfig.encryptionEnabled()) {
-			encryptionContext = EncryptionContext.create(outputConfig.secret_key);
+			encryptionContext = EncryptionContext.create(outputConfig.secret_key, outputConfig.init_vector);
 		}
 
 		DataJsonGenerator dataWriter = outputConfig.encryptionMode == EncryptionMode.ENCRYPT_DATA
