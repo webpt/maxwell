@@ -111,7 +111,7 @@ public class MaxwellIntegrationTest extends MaxwellTestWithIsolatedServer {
 		List<RowMap> list;
 		String before[] = { "create table pksen (Id set('android','iphone','ipad'), primary key(ID))" };
 		String input[] = {"insert into pksen set id ='android'"};
-		String expectedJSON = "{\"database\":\"shard_1\",\"table\":\"pksen\",\"pk.id\":[\"android\"]}";
+		String expectedJSON = "{\"database\":\"shard_1\",\"table\":\"pksen\",\"pk.id\":\"android\"}";
 		list = getRowsForSQL(null, input, before);
 		assertThat(list.size(), is(1));
 		assertThat(list.get(0).pkToJson(RowMap.KeyFormat.HASH), is(expectedJSON));

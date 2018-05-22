@@ -99,6 +99,10 @@ public class SchemaCapturer {
 		LOGGER.debug("Starting schema capture of " + size + " databases...");
 		int counter = 1;
 		for (Database db : databases) {
+			if( counter % 10 == 0 ) {
+				connection.createStatement().executeQuery("FLUSH TABLES WITH READ LOCK");
+				connection.createStatement().executeQuery("UNLOCK TABLES");
+			}
 			LOGGER.debug(counter + "/" + size + " Capturing " + db.getName() + "...");
 			captureDatabase(db);
 			counter++;

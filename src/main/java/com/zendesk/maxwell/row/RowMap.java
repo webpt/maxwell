@@ -6,6 +6,7 @@ import com.zendesk.maxwell.producer.EncryptionMode;
 import com.zendesk.maxwell.replication.BinlogPosition;
 import com.zendesk.maxwell.producer.MaxwellOutputConfig;
 import com.zendesk.maxwell.replication.Position;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,12 +14,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.security.NoSuchAlgorithmException;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
@@ -221,6 +217,26 @@ public class RowMap implements Serializable {
 		return partitionKey.toString();
 	}
 
+	private void writePKToJson(List<String> pkColumns, JsonGenerator g) throws IOException{
+		String[] pkColumnsArray = pkColumns.toArray(new String[pkColumns.size()]);
+		Arrays.sort(pkColumnsArray);
+		String primaryKeyString = "";
+		for ( String s : pkColumnsArray)  {
+			if(data.get(s) == null){
+				primaryKeyString += ",null";
+			}
+			else{
+				primaryKeyString +="," + data.get(s).toString().toLowerCase();
+			}
+		}
+		if(pkColumns.size() == 0){
+			g.writeStringField("primary_key", "none");
+		}
+		else {
+			g.writeStringField("primary_key", primaryKeyString.substring(1));
+		}
+	}
+
 	private void writeMapToJSON(
 			String jsonMapName,
 			LinkedHashMap<String, Object> data,
@@ -244,18 +260,14 @@ public class RowMap implements Serializable {
 
 		if (value instanceof List) { // sets come back from .asJSON as lists, and jackson can't deal with lists natively.
 			List stringList = (List) value;
-
-			g.writeArrayFieldStart(key);
-			for (Object s : stringList) {
-				g.writeObject(s);
-			}
-			g.writeEndArray();
+			String delimitedList = StringUtils.join(stringList, ',');
+			g.writeStringField(key.toLowerCase(), delimitedList);
 		} else if (value instanceof RawJSONString) {
 			// JSON column type, using binlog-connector's serializers.
-			g.writeFieldName(key);
+			g.writeFieldName(key.toLowerCase());
 			g.writeRawValue(((RawJSONString) value).json);
 		} else {
-			g.writeObjectField(key, value);
+			g.writeObjectField(key.toLowerCase(), value);
 		}
 	}
 
@@ -270,6 +282,7 @@ public class RowMap implements Serializable {
 
 		g.writeStringField(FieldNames.DATABASE, this.database);
 		g.writeStringField(FieldNames.TABLE, this.table);
+		writePKToJson(pkColumns, g);
 
 		if ( outputConfig.includesRowQuery && this.rowQuery != null) {
 			g.writeStringField(FieldNames.QUERY, this.rowQuery);

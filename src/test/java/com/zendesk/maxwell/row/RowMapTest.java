@@ -169,7 +169,7 @@ public class RowMapTest {
 
 		String jsonString = rowMap.pkToJson(RowMap.KeyFormat.ARRAY);
 
-		Assert.assertEquals("[\"MyDatabase\",\"MyTable\",[{\"id\":\"9001\"},{\"name\":[\"example\"]}]]",
+		Assert.assertEquals("[\"MyDatabase\",\"MyTable\",[{\"id\":\"9001\"},{\"name\":\"example\"}]]",
 				jsonString);
 	}
 	@Test
@@ -241,10 +241,10 @@ public class RowMapTest {
 
 		MaxwellOutputConfig outputConfig = getMaxwellOutputConfig();
 
-		Assert.assertEquals("{\"database\":\"MyDatabase\",\"table\":\"MyTable\",\"type\":\"insert\"," +
+		Assert.assertEquals("{\"database\":\"MyDatabase\",\"table\":\"MyTable\",\"primary_key\":\"none\",\"type\":\"insert\"," +
 				"\"ts\":1496712943,\"position\":\"binlog-0001:1\",\"gtid\":null,\"server_id\":7653213," +
 				"\"thread_id\":6532312,\"int\":1234,\"str\":\"foo\",\"data\":{\"id\":\"9001\",\"first_name\":\"foo\"," +
-				"\"last_name\":\"bar\",\"rawJSON\":{\"UserID\":20}}}", rowMap.toJSON(outputConfig));
+				"\"last_name\":\"bar\",\"rawjson\":{\"UserID\":20}}}", rowMap.toJSON(outputConfig));
 
 	}
 
@@ -266,10 +266,10 @@ public class RowMapTest {
 
 		MaxwellOutputConfig outputConfig = getMaxwellOutputConfig(Pattern.compile("^.*name.*$"));
 
-		Assert.assertEquals("{\"database\":\"MyDatabase\",\"table\":\"MyTable\",\"type\":\"insert\"," +
+		Assert.assertEquals("{\"database\":\"MyDatabase\",\"table\":\"MyTable\",\"primary_key\":\"none\",\"type\":\"insert\"," +
 				"\"ts\":1496712943,\"position\":\"binlog-0001:1\",\"gtid\":null,\"server_id\":7653213," +
 				"\"thread_id\":6532312,\"int\":1234,\"str\":\"foo\",\"data\":{\"id\":\"9001\"," +
-				"\"interests\":[\"hiking\",\"programming\"]}}", rowMap.toJSON(outputConfig));
+				"\"interests\":\"hiking,programming\"}}", rowMap.toJSON(outputConfig));
 	}
 
 	private MaxwellOutputConfig getMaxwellOutputConfig(Pattern... patterns) {

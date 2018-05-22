@@ -160,7 +160,7 @@ public class BootstrapIntegrationTest extends MaxwellTestWithIsolatedServer {
 		ArrayList<String> setValue = new ArrayList<>(2);
 		setValue.add("a");
 		setValue.add("b");
-		testColumnType("set('a', 'b')","'a,b'", setValue);
+		testColumnType("set('a', 'b')","'a,b'", "a,b");
 	}
 
 
