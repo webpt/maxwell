@@ -75,18 +75,12 @@ public class SchemaCapturer {
 
 	public Schema capture() throws SQLException {
 		LOGGER.debug("Capturing schemas...");
-		int flushCounter = 0;
 		ArrayList<Database> databases = new ArrayList<>();
 
 		ResultSet rs = connection.createStatement().executeQuery(
 				"SELECT SCHEMA_NAME, DEFAULT_CHARACTER_SET_NAME FROM INFORMATION_SCHEMA.SCHEMATA"
 		);
 		while (rs.next()) {
-			if(flushCounter >= 10){
-				connection.createStatement().executeQuery("FLUSH TABLES WITH READ LOCK;");
-				connection.createStatement().executeQuery("UNLOCK TABLES;");
-				flushCounter = 0;
-			}
 			String dbName = rs.getString("SCHEMA_NAME");
 			String charset = rs.getString("DEFAULT_CHARACTER_SET_NAME");
 
@@ -106,6 +100,10 @@ public class SchemaCapturer {
 		LOGGER.debug("Starting schema capture of " + size + " databases...");
 		int counter = 1;
 		for (Database db : databases) {
+			if( counter % 10 == 0 ) {
+				connection.createStatement().executeQuery("FLUSH TABLES WITH READ LOCK");
+				connection.createStatement().executeQuery("UNLOCK TABLES");
+			}
 			LOGGER.debug(counter + "/" + size + " Capturing " + db.getName() + "...");
 			captureDatabase(db);
 			counter++;
