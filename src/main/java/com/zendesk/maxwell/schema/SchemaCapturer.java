@@ -92,7 +92,6 @@ public class SchemaCapturer {
 
 			Database db = new Database(dbName, charset);
 			databases.add(db);
-			flushCounter++;
 		}
 		rs.close();
 
