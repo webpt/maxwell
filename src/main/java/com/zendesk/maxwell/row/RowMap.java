@@ -220,20 +220,23 @@ public class RowMap implements Serializable {
 	private void writePKToJson(List<String> pkColumns, JsonGenerator g) throws IOException{
 		String[] pkColumnsArray = pkColumns.toArray(new String[pkColumns.size()]);
 		Arrays.sort(pkColumnsArray);
-		String primaryKeyString = "";
+		List<String> primaryKeyValues = new ArrayList<>();
 		for ( String s : pkColumnsArray)  {
 			if(data.get(s) == null){
-				primaryKeyString += ",null";
+				primaryKeyValues.add("null");
+				//primaryKeyString += ",null";
 			}
 			else{
-				primaryKeyString +="," + data.get(s).toString().toLowerCase();
+				primaryKeyValues.add(data.get(s).toString());
+				//primaryKeyString +="," + data.get(s).toString();
 			}
 		}
 		if(pkColumns.size() == 0){
 			g.writeStringField("primary_key", "none");
 		}
 		else {
-			g.writeStringField("primary_key", primaryKeyString.substring(1));
+			g.writeStringField("primary_key", StringUtils.join(primaryKeyValues, ","));
+			//g.writeStringField("primary_key", primaryKeyString.substring(1));
 		}
 	}
 
@@ -261,13 +264,13 @@ public class RowMap implements Serializable {
 		if (value instanceof List) { // sets come back from .asJSON as lists, and jackson can't deal with lists natively.
 			List stringList = (List) value;
 			String delimitedList = StringUtils.join(stringList, ',');
-			g.writeStringField(key.toLowerCase(), delimitedList);
+			g.writeStringField(key, delimitedList);
 		} else if (value instanceof RawJSONString) {
 			// JSON column type, using binlog-connector's serializers.
-			g.writeFieldName(key.toLowerCase());
+			g.writeFieldName(key);
 			g.writeRawValue(((RawJSONString) value).json);
 		} else {
-			g.writeObjectField(key.toLowerCase(), value);
+			g.writeObjectField(key, value);
 		}
 	}
 

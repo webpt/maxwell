@@ -244,7 +244,7 @@ public class RowMapTest {
 		Assert.assertEquals("{\"database\":\"MyDatabase\",\"table\":\"MyTable\",\"primary_key\":\"none\",\"type\":\"insert\"," +
 				"\"ts\":1496712943,\"position\":\"binlog-0001:1\",\"gtid\":null,\"server_id\":7653213," +
 				"\"thread_id\":6532312,\"int\":1234,\"str\":\"foo\",\"data\":{\"id\":\"9001\",\"first_name\":\"foo\"," +
-				"\"last_name\":\"bar\",\"rawjson\":{\"UserID\":20}}}", rowMap.toJSON(outputConfig));
+				"\"last_name\":\"bar\",\"rawJSON\":{\"UserID\":20}}}", rowMap.toJSON(outputConfig));
 
 	}
 
