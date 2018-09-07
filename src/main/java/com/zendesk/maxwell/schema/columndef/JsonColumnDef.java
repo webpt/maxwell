@@ -13,19 +13,20 @@ public class JsonColumnDef extends ColumnDef {
 	}
 
 	@Override
-	public boolean matchesMysqlType(int type) {
-		return JSON.getCode() == type;
-	}
-
-	@Override
 	public Object asJSON(Object value) {
-		try {
-			byte[] bytes = (byte[]) value;
-			String jsonString = bytes.length > 0 ? JsonBinary.parseAsString(bytes) : "null";
-			return new RawJSONString(jsonString);
-		} catch (IOException e) {
-			throw new RuntimeException(e);
+		String jsonString;
+
+		if ( value instanceof String ) {
+			jsonString = (String) value;
+		} else {
+			try {
+				byte[] bytes = (byte[]) value;
+				jsonString = bytes.length > 0 ? JsonBinary.parseAsString(bytes) : "null";
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
 		}
+		return new RawJSONString(jsonString);
 	}
 
 	@Override

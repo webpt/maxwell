@@ -2,7 +2,6 @@ package com.zendesk.maxwell.recovery;
 
 import com.github.shyiko.mysql.binlog.network.SSLMode;
 import com.zendesk.maxwell.*;
-import com.zendesk.maxwell.replication.BinlogPosition;
 import com.zendesk.maxwell.replication.Position;
 import com.zendesk.maxwell.row.HeartbeatRowMap;
 import com.zendesk.maxwell.row.RowMap;
@@ -93,7 +92,7 @@ public class RecoveryTest extends TestWithNameLogging {
 
 		String[] input = generateMasterData();
 		/* run the execution through with the replicator running so we get heartbeats */
-		MaxwellTestSupport.getRowsWithReplicator(masterServer, null, input, null);
+		MaxwellTestSupport.getRowsWithReplicator(masterServer, input, null, null);
 
 		Position slavePosition = MaxwellTestSupport.capture(slaveServer.getConnection());
 
@@ -110,7 +109,8 @@ public class RecoveryTest extends TestWithNameLogging {
 			recoveryInfo
 		);
 
-		Position recoveredPosition = recovery.recover();
+		Position recoveredPosition = recovery.recover().getPosition();
+
 		// lousy tests, but it's very hard to make firm assertions about the correct position.
 		// It's in a ballpark.
 
@@ -133,7 +133,7 @@ public class RecoveryTest extends TestWithNameLogging {
 		MaxwellContext slaveContext = getContext(slaveServer.getPort(), true);
 
 		String[] input = generateMasterData();
-		MaxwellTestSupport.getRowsWithReplicator(masterServer, null, input, null);
+		MaxwellTestSupport.getRowsWithReplicator(masterServer, input, null, null);
 
 		generateNewMasterData(false, DATA_SIZE);
 		RecoveryInfo recoveryInfo = slaveContext.getRecoveryInfo();
@@ -151,8 +151,7 @@ public class RecoveryTest extends TestWithNameLogging {
 			recoveryInfo
 		);
 
-		Position recoveredPosition = recovery.recover();
-		assertEquals(null, recoveredPosition);
+		assertEquals(null, recovery.recover());
 	}
 
 	private void drainReplication(BufferedMaxwell maxwell, List<RowMap> rows) throws Exception {
@@ -203,7 +202,7 @@ public class RecoveryTest extends TestWithNameLogging {
 		}
 		String[] input = generateMasterData();
 		/* run the execution through with the replicator running so we get heartbeats */
-		List<RowMap> rows = MaxwellTestSupport.getRowsWithReplicator(masterServer, null, input, null);
+		List<RowMap> rows = MaxwellTestSupport.getRowsWithReplicator(masterServer, input, null, null);
 
 		Position approximateRecoverPosition = MaxwellTestSupport.capture(slaveServer.getConnection());
 		LOGGER.warn("slave master position at time of cut: " + approximateRecoverPosition);
@@ -268,7 +267,7 @@ public class RecoveryTest extends TestWithNameLogging {
 			}
 		};
 
-		List<RowMap> rows = MaxwellTestSupport.getRowsWithReplicator(masterServer, null, callback, null);
+		List<RowMap> rows = MaxwellTestSupport.getRowsWithReplicator(masterServer, callback, (c) -> {});
 		int expectedRows = input.length;
 		assertEquals(expectedRows, rows.size());
 
@@ -303,7 +302,7 @@ public class RecoveryTest extends TestWithNameLogging {
 	public void testFailOver() throws Exception {
 		String[] input = generateMasterData();
 		// Have maxwell connect to master first
-		List<RowMap> rows = MaxwellTestSupport.getRowsWithReplicator(masterServer, null, input, null);
+		List<RowMap> rows = MaxwellTestSupport.getRowsWithReplicator(masterServer, input, null, null);
 		int expectedRowCount = DATA_SIZE;
 		try {
 			// sleep a bit for slave to catch up
@@ -362,7 +361,7 @@ public class RecoveryTest extends TestWithNameLogging {
 		if (savedSchema == null) {
 			Connection c = context.getMaxwellConnection();
 			Schema newSchema = new SchemaCapturer(c, context.getCaseSensitivity()).capture();
-			savedSchema = SavedSchemaSupport.getSavedSchema(context, newSchema, context.getInitialPosition());
+			savedSchema = new MysqlSavedSchema(context, newSchema, context.getInitialPosition());
 			savedSchema.save(c);
 		}
 		Long oldSchemaId = savedSchema.getSchemaID();
